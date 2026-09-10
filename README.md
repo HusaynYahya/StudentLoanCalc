@@ -9,7 +9,7 @@ Open `index.html`. No build step, no framework, no network requests.
 ```
 ├── index.html            the page, the form and the reference notes
 ├── loan.css              styles; design tokens at the top, light and dark
-├── loan.js               the interface: form, chart, log, CSV, persistence
+├── loan.js               the interface: dashboard, sliders, charts, log, CSV
 ├── engine.js             the rules and the month-by-month simulation
 └── test/engine.test.js   tests for the engine — node test/engine.test.js
 ```
@@ -17,17 +17,38 @@ Open `index.html`. No build step, no framework, no network requests.
 `engine.js` is pure — circumstances in, ledger out, no DOM — and loads under
 both `<script>` and `require()`, which is how the tests run it.
 
+## The dashboard
+
+Controls on the left, a running total pinned beside them on the right. Every
+slider drag moves the numbers in that rail without scrolling: what leaves your
+pay each month, what you hand over in the end, what gets written off.
+
+**Career paths.** Thirteen of them as pickable cards — doctor, engineer,
+teacher, nurse, solicitor, software, accountancy, civil service, arts, and a
+plain "set it myself". Each is a curve of anchor salaries in *today's* money
+(first year, third, sixth, tenth, twentieth), interpolated geometrically, with
+inflation added on top when it becomes cash. Illustrative starting points, not
+forecasts — they exist to be edited.
+
+**Sliders.** Any number box carrying `data-slider="min,max,step"` gets a range
+control fitted above it automatically. The slider covers the sensible range;
+the box still accepts anything outside it, so neither gets in the other's way.
+
+## The five charts
+
+| | What it shows |
+| --- | --- |
+| **The balance** | What you owe, what you have repaid and what interest has been charged — the grey line usually rises for years before it falls |
+| **Salary against the threshold** | The two lines, with the charged band shaded: you pay 9% of the gap and nothing on the rest |
+| **What leaves your pay** | The monthly deduction over time — the figure you would notice on a payslip |
+| **The interest rate** | A step line per loan against RPI, so Plan 2's slide with income and the cap lapsing are both visible |
+| **Where it ends up** | Two bars of identical length, because they are the same money from each end: borrowed + interest = repaid + written off, exactly |
+
+A cash / today's-money toggle redraws all of them.
+
 ## The two ways to give it an income
 
-**Predict it.** Pick a career path and the salary line is drawn from a curve of
-anchor salaries — first year, third, sixth, tenth, twentieth — interpolated
-geometrically between them. Those anchors are in *today's* money, so the curve
-is real career progression and inflation is added on top when it is turned into
-cash. There is also a plain "set it myself": a starting salary and a percentage
-a year. The paths are illustrative starting points, not forecasts, and they are
-meant to be edited.
-
-**Type it in.** A table of one row per tax year, pre-filled from the prediction
+**Type it in.** Instead of a career card, a table of one row per tax year, pre-filled from the prediction
 so you are editing rather than typing forty numbers. Any year can be set to £0
 for a career break, a year out or further study — the engine takes it literally
 and deducts nothing that year. Past the last row the last figure carries on
@@ -99,8 +120,8 @@ have been raised.
 
 The year-by-year table is the point of the tool. Each row carries the salary,
 the threshold, the monthly deduction, what was paid that year, the interest
-charged, the running total paid off and the closing balance; selecting a row
-opens its twelve months. Everything reconciles — opening balance plus borrowing
+rate, the interest charged, the running total paid off and the closing balance;
+selecting a row opens its twelve months. Everything reconciles — opening balance plus borrowing
 plus interest less repayments equals the closing balance, and there is a test
 that says so. **Download as CSV** exports the whole thing, including each year's
 balance restated in today's money.

@@ -252,9 +252,10 @@
     lastSim = sim;
 
     renderVerdict(sim);
+    renderRail(sim);
     renderStats(sim);
     renderSensitivity(sim);
-    renderChart(sim);
+    renderAllCharts(sim);
     renderMilestones(sim);
     renderLog(sim);
     renderSummaries(sim);
@@ -321,8 +322,6 @@
         '<span class="sub">' + s.sub + "</span></dd></dl>";
     }).join("");
   }
-
-  /* ---- the chart -------------------------------------------------------- */
 
   /* ---- how much of the answer is the guess? ----------------------------- */
 
@@ -391,20 +390,91 @@
     $("sensTable").innerHTML = html;
   }
 
+  /* ---------------------------------------------------------------------- *
+   * CHARTS
+   *
+   * One frame helper and five pictures, all plain SVG built as strings and
+   * coloured through CSS custom properties, so light and dark come free.
+   * -------------------------------------------------------------------- */
+
+  function niceScale(max, want) {
+    if (!(max > 0)) return { step: 1, top: 1 };
+    var rough = max / (want || 4);
+    var mag = Math.pow(10, Math.floor(Math.log10(rough)));
+    var norm = rough / mag;
+    var step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
+    return { step: step, top: Math.ceil(max / step) * step };
+  }
+
+  // Shared axes. `fmt` turns a value into an axis label; `years` are the rows
+  // being plotted, thinned so the labels never collide.
+  function frame(o) {
+    var W = o.w || 760, H = o.h || 240;
+    var ml = o.ml == null ? (W < 600 ? 44 : 54) : o.ml;
+    var mr = 14, mt = 16, mb = 28;
+    var iw = W - ml - mr, ih = H - mt - mb;
+    var xSpan = (o.xMax - o.xMin) || 1;
+
+    var x = function (v) { return ml + ((v - o.xMin) / xSpan) * iw; };
+    var y = function (v) { return mt + ih - (v / o.top) * ih; };
+
+    var grid = "";
+    for (var v = 0; v <= o.top + 1e-9; v += o.step) {
+      var gy = y(v);
+      grid += '<line x1="' + ml + '" y1="' + gy.toFixed(1) + '" x2="' + (W - mr) + '" y2="' + gy.toFixed(1) +
+        '" stroke="var(--line-soft)" stroke-width="1"/>' +
+        '<text x="' + (ml - 8) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="var(--ink-faint)">' +
+        o.fmt(v) + "</text>";
+    }
+
+    // Pick the years to label, then drop any that would sit on top of the
+    // final one — the last year always earns its place, the stride does not.
+    var every = Math.max(1, Math.ceil(o.years.length / (W < 600 ? 5 : 7)));
+    var lastIdx = o.years.length - 1;
+    var picked = o.years.map(function (yr, i) { return i; })
+      .filter(function (i) { return i % every === 0 || i === lastIdx; });
+    var minGap = 36;
+    picked = picked.filter(function (i, n) {
+      if (i === lastIdx || n === picked.length - 1) return true;
+      return x(o.years[lastIdx].taxYear) - x(o.years[i].taxYear) >= minGap;
+    });
+
+    var xlab = picked.map(function (i) {
+      var yr = o.years[i];
+      return '<text x="' + x(yr.taxYear).toFixed(1) + '" y="' + (H - 8) +
+        '" text-anchor="middle" font-size="11" fill="var(--ink-faint)">' + yr.label.slice(0, 4) + "</text>";
+    }).join("");
+
+    return {
+      x: x, y: y, W: W, H: H, ml: ml, mt: mt, iw: iw, ih: ih,
+      grid: grid, xlab: xlab,
+      open: '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + o.title + '">' + grid + xlab,
+      close: "</svg>"
+    };
+  }
+
+  function polyline(pts, f, key) {
+    return pts.map(function (p, i) {
+      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p[key]).toFixed(1);
+    }).join(" ");
+  }
+
+  // Is the reader looking at cash of the day, or today's money?
+  function scaled(y, v) { return state.basis === "real" ? v * y.deflator : v; }
+
+  /* ---- 1. the balance, and what you have paid --------------------------- */
+
   function renderChart(sim) {
     var years = sim.combined.years;
     var real = state.basis === "real";
-    var W = 820, H = 300, ml = 54, mr = 12, mt = 14, mb = 30;
-    var iw = W - ml - mr, ih = H - mt - mb;
 
-    // Cumulative repaid in today's money is a sum of differently-deflated
-    // payments, so it has to be accumulated rather than deflated at the end.
+    // In today's money the running total has to be accumulated from each
+    // year's deflated payment, not deflated once at the end.
     var cumReal = 0;
-    var series = years.map(function (y) {
+    var pts = years.map(function (y) {
       cumReal += y.realRepaid;
       return {
-        label: y.label,
-        taxYear: y.taxYear,
+        taxYear: y.taxYear, label: y.label,
         balance: real ? y.realClosingBalance : y.closingBalance,
         repaid: real ? cumReal : y.cumRepaid,
         interest: real ? y.cumInterest * y.deflator : y.cumInterest
@@ -412,71 +482,262 @@
     });
 
     var max = 0;
-    series.forEach(function (p) { max = Math.max(max, p.balance, p.repaid, p.interest); });
-    if (max <= 0) max = 1000;
+    pts.forEach(function (p) { max = Math.max(max, p.balance, p.repaid, p.interest); });
+    var s = niceScale(max);
+    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
+                    top: s.top, step: s.step, fmt: gbpShort, title: "Balance outstanding, total repaid and total interest, by tax year" });
 
-    // Round the axis to 1, 2, 2.5 or 5 times a power of ten, so the labels read
-    // as money rather than as whatever the data happened to reach.
-    var rough = max / 4;
-    var mag = Math.pow(10, Math.floor(Math.log10(rough)));
-    var norm = rough / mag;
-    var step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 2.5 ? 2.5 : norm <= 5 ? 5 : 10) * mag;
-    var top = Math.ceil(max / step) * step;
+    var area = polyline(pts, f, "balance") +
+      " L" + f.x(pts[pts.length - 1].taxYear).toFixed(1) + " " + f.y(0) +
+      " L" + f.x(pts[0].taxYear).toFixed(1) + " " + f.y(0) + " Z";
 
-    var x = function (i) { return ml + (series.length < 2 ? iw / 2 : (i / (series.length - 1)) * iw); };
-    var y = function (v) { return mt + ih - (v / top) * ih; };
-
-    var line = function (field) {
-      return series.map(function (p, i) { return (i ? "L" : "M") + x(i).toFixed(1) + " " + y(p[field]).toFixed(1); }).join(" ");
-    };
-    var area = function (field) {
-      return line(field) + " L" + x(series.length - 1).toFixed(1) + " " + y(0) + " L" + x(0).toFixed(1) + " " + y(0) + " Z";
-    };
-
-    // Gridlines and money labels
-    var grid = "", ticks = Math.round(top / step);
-    for (var g = 0; g <= ticks; g++) {
-      var v = step * g, gy = y(v);
-      grid += '<line x1="' + ml + '" y1="' + gy.toFixed(1) + '" x2="' + (W - mr) + '" y2="' + gy.toFixed(1) +
-        '" stroke="var(--line-soft)" stroke-width="1"/>' +
-        '<text x="' + (ml - 8) + '" y="' + (gy + 4).toFixed(1) + '" text-anchor="end" font-size="11" fill="var(--ink-faint)">' +
-        gbpShort(v) + "</text>";
-    }
-
-    // Year labels, thinned so they never collide
-    var everyN = Math.max(1, Math.ceil(series.length / 9));
-    var xlab = "";
-    series.forEach(function (p, i) {
-      if (i % everyN && i !== series.length - 1) return;
-      xlab += '<text x="' + x(i).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="11" fill="var(--ink-faint)">' +
-        p.label.slice(0, 4) + "</text>";
-    });
-
-    // The moment the loan ends, marked on the axis
-    var endIdx = series.length - 1;
-    var endLabel = sim.combined.everRepaidInFull ? "cleared" : "written off";
-    var marker = '<line x1="' + x(endIdx).toFixed(1) + '" y1="' + mt + '" x2="' + x(endIdx).toFixed(1) + '" y2="' + (mt + ih) +
-      '" stroke="' + (sim.combined.everRepaidInFull ? "var(--accent)" : "var(--danger)") + '" stroke-width="1" stroke-dasharray="3 3"/>' +
-      '<rect x="' + (x(endIdx) - 12 - endLabel.length * 6.2).toFixed(1) + '" y="' + (mt + 1) +
+    var endX = f.x(pts[pts.length - 1].taxYear);
+    var done = sim.combined.everRepaidInFull;
+    var endLabel = done ? "cleared" : "written off";
+    var endColour = done ? "var(--accent)" : "var(--danger)";
+    var marker =
+      '<line x1="' + endX.toFixed(1) + '" y1="' + f.mt + '" x2="' + endX.toFixed(1) + '" y2="' + (f.mt + f.ih) +
+      '" stroke="' + endColour + '" stroke-width="1" stroke-dasharray="3 3"/>' +
+      '<rect x="' + (endX - 12 - endLabel.length * 6.2).toFixed(1) + '" y="' + (f.mt + 1) +
       '" width="' + (endLabel.length * 6.2 + 10).toFixed(1) + '" height="16" rx="3" fill="var(--bg-raise)"/>' +
-      '<text x="' + (x(endIdx) - 7).toFixed(1) + '" y="' + (mt + 13) + '" text-anchor="end" font-size="11" font-weight="600" fill="' +
-      (sim.combined.everRepaidInFull ? "var(--accent)" : "var(--danger)") + '">' + endLabel + "</text>";
+      '<text x="' + (endX - 7).toFixed(1) + '" y="' + (f.mt + 13) +
+      '" text-anchor="end" font-size="11" font-weight="600" fill="' + endColour + '">' + endLabel + "</text>";
 
-    $("chart").innerHTML =
-      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Balance outstanding, total repaid and total interest, by tax year">' +
-      grid + xlab +
-      '<path d="' + area("balance") + '" fill="var(--bg-sink)" opacity=".85"/>' +
-      '<path d="' + line("balance") + '" fill="none" stroke="var(--ink-soft)" stroke-width="2"/>' +
-      '<path d="' + line("interest") + '" fill="none" stroke="var(--warn)" stroke-width="1.75" stroke-dasharray="4 3"/>' +
-      '<path d="' + line("repaid") + '" fill="none" stroke="var(--accent)" stroke-width="2.25"/>' +
-      marker +   // last, so its label sits clear of whichever line finishes high
-      "</svg>";
+    $("chart").innerHTML = f.open +
+      '<path d="' + area + '" fill="var(--bg-sink)" opacity=".85"/>' +
+      '<path d="' + polyline(pts, f, "balance") + '" fill="none" stroke="var(--ink-soft)" stroke-width="2"/>' +
+      '<path d="' + polyline(pts, f, "interest") + '" fill="none" stroke="var(--warn)" stroke-width="1.75" stroke-dasharray="4 3"/>' +
+      '<path d="' + polyline(pts, f, "repaid") + '" fill="none" stroke="var(--accent)" stroke-width="2.25"/>' +
+      marker + f.close;
 
     $("chartKey").innerHTML =
-      '<i class="k-balance">Balance outstanding</i>' +
-      '<i class="k-repaid">Repaid, running total</i>' +
-      '<i class="k-interest">Interest charged, running total</i>' +
-      (state.basis === "real" ? '<i style="color:var(--ink-mute)">in ' + E.taxYearLabel(series[0].taxYear) + " money</i>" : "");
+      '<i class="k-balance">Still owed</i><i class="k-repaid">Repaid, running total</i>' +
+      '<i class="k-interest">Interest charged, running total</i>';
+  }
+
+  /* ---- 2. salary against the threshold ---------------------------------- */
+
+  function renderSalaryChart(sim) {
+    var years = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!years.length) { $("salaryChart").innerHTML = ""; $("salaryKey").innerHTML = ""; return; }
+
+    var pts = years.map(function (y) {
+      return {
+        taxYear: y.taxYear, label: y.label,
+        salary: scaled(y, y.salary),
+        threshold: scaled(y, y.threshold || 0)
+      };
+    });
+    pts.forEach(function (p) { p.upper = Math.max(p.salary, p.threshold); });
+
+    var max = 0;
+    pts.forEach(function (p) { max = Math.max(max, p.salary, p.threshold); });
+    var s = niceScale(max);
+    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
+                    top: s.top, step: s.step, fmt: gbpShort, w: 440, h: 250,
+                    title: "Gross salary against the repayment threshold, by tax year" });
+
+    // The band between the two lines is the only part that is ever charged.
+    var band = polyline(pts, f, "upper") + " " +
+      pts.slice().reverse().map(function (p) {
+        return "L" + f.x(p.taxYear).toFixed(1) + " " + f.y(p.threshold).toFixed(1);
+      }).join(" ") + " Z";
+
+    $("salaryChart").innerHTML = f.open +
+      '<path d="' + band + '" fill="var(--accent)" opacity=".16"/>' +
+      '<path d="' + polyline(pts, f, "threshold") + '" fill="none" stroke="var(--warn)" stroke-width="1.75" stroke-dasharray="5 3"/>' +
+      '<path d="' + polyline(pts, f, "salary") + '" fill="none" stroke="var(--accent)" stroke-width="2.25"/>' +
+      f.close;
+
+    var first = pts[0], last = pts[pts.length - 1];
+    var gapNow = Math.max(0, first.salary - first.threshold);
+    var gapEnd = Math.max(0, last.salary - last.threshold);
+    $("salaryKey").innerHTML =
+      '<i class="k-repaid">Gross salary</i><i class="k-interest">Threshold</i>' +
+      '<i style="color:var(--ink-mute)">Charged on ' + gbp(gapNow) + " at the start, " + gbp(gapEnd) + " at the end</i>";
+  }
+
+  /* ---- 3. what leaves your pay each month ------------------------------- */
+
+  function renderMonthlyChart(sim) {
+    var years = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!years.length) { $("monthlyChart").innerHTML = ""; $("monthlyKey").innerHTML = ""; return; }
+
+    var pts = years.map(function (y) {
+      return { taxYear: y.taxYear, label: y.label, monthly: scaled(y, y.monthlyRepayment) };
+    });
+
+    var max = 0;
+    pts.forEach(function (p) { max = Math.max(max, p.monthly); });
+    var s = niceScale(max);
+    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
+                    top: s.top, step: s.step, fmt: function (v) { return "£" + Math.round(v); },
+                    w: 440, h: 250, title: "Monthly repayment, by tax year" });
+
+    var area = polyline(pts, f, "monthly") +
+      " L" + f.x(pts[pts.length - 1].taxYear).toFixed(1) + " " + f.y(0) +
+      " L" + f.x(pts[0].taxYear).toFixed(1) + " " + f.y(0) + " Z";
+
+    var peak = pts.reduce(function (m, p) { return p.monthly > m.monthly ? p : m; }, pts[0]);
+
+    $("monthlyChart").innerHTML = f.open +
+      '<path d="' + area + '" fill="var(--accent)" opacity=".16"/>' +
+      '<path d="' + polyline(pts, f, "monthly") + '" fill="none" stroke="var(--accent)" stroke-width="2.25"/>' +
+      '<circle cx="' + f.x(peak.taxYear).toFixed(1) + '" cy="' + f.y(peak.monthly).toFixed(1) +
+      '" r="3.5" fill="var(--accent)"/>' + f.close;
+
+    $("monthlyKey").innerHTML =
+      '<i class="k-repaid">Deducted each month</i>' +
+      '<i style="color:var(--ink-mute)">' + gbp(pts[0].monthly) + " at the start, peaking at " +
+      gbp(peak.monthly) + " in " + peak.label + "</i>";
+  }
+
+  /* ---- 4. the interest rate --------------------------------------------- */
+
+  function renderRateChart(sim) {
+    var years = sim.combined.years;
+    var a = sim.assumptions;
+
+    var lines = sim.loans.map(function (r, i) {
+      return {
+        label: r.planLabel,
+        colour: i === 0 ? "var(--warn)" : "var(--accent)",
+        points: r.years.map(function (y) { return { taxYear: y.taxYear, rate: y.rateHigh }; })
+      };
+    });
+
+    var max = a.rpi;
+    lines.forEach(function (L) { L.points.forEach(function (p) { max = Math.max(max, p.rate); }); });
+    var top = Math.ceil(max * 100 + 0.5) / 100;
+    var step = top > 0.08 ? 0.02 : 0.01;
+
+    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
+                    top: top, step: step, w: 440, h: 250,
+                    fmt: function (v) { return (v * 100).toFixed(0) + "%"; },
+                    title: "The interest rate charged, by tax year" });
+
+    // RPI itself, for reference: the gap to it is the whole of the "+3%" story.
+    var rpiLine = '<line x1="' + f.ml + '" y1="' + f.y(a.rpi).toFixed(1) + '" x2="' + (f.W - 14) +
+      '" y2="' + f.y(a.rpi).toFixed(1) + '" stroke="var(--ink-faint)" stroke-width="1" stroke-dasharray="2 4"/>';
+
+    var repayAt = years.filter(function (y) { return y.phase === "repaying"; })[0];
+    var startMark = "";
+    if (repayAt && repayAt.taxYear > years[0].taxYear) {
+      var mx = f.x(repayAt.taxYear);
+      startMark = '<line x1="' + mx.toFixed(1) + '" y1="' + f.mt + '" x2="' + mx.toFixed(1) +
+        '" y2="' + (f.mt + f.ih) + '" stroke="var(--line)" stroke-width="1"/>' +
+        '<text x="' + (mx + 5).toFixed(1) + '" y="' + (f.mt + 11) +
+        '" font-size="10" fill="var(--ink-faint)">repayment starts</text>';
+    }
+
+    // A step line: the rate holds for a whole tax year, then jumps on 6 April.
+    var paths = lines.map(function (L) {
+      var d = "", prev = null;
+      L.points.forEach(function (p, i) {
+        var px = f.x(p.taxYear), py = f.y(p.rate);
+        if (i === 0) d += "M" + px.toFixed(1) + " " + py.toFixed(1);
+        else d += "L" + px.toFixed(1) + " " + prev.toFixed(1) + "L" + px.toFixed(1) + " " + py.toFixed(1);
+        prev = py;
+      });
+      return '<path d="' + d + '" fill="none" stroke="' + L.colour + '" stroke-width="2" stroke-linejoin="round"/>';
+    }).join("");
+
+    $("rateChart").innerHTML = f.open + rpiLine + startMark + paths + f.close;
+    $("rateKey").innerHTML = lines.map(function (L) {
+      return '<i style="color:' + L.colour + '">' + L.label + "</i>";
+    }).join("") + '<i style="color:var(--ink-faint)">RPI, ' + pct(a.rpi) + "</i>";
+    $("rateNote").textContent = rateExplanation(sim);
+  }
+
+  function rateExplanation(sim) {
+    var a = sim.assumptions;
+    var yrs = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!yrs.length) return "";
+    var lo = Math.min.apply(null, yrs.map(function (y) { return y.rateLow; }));
+    var hi = Math.max.apply(null, yrs.map(function (y) { return y.rateHigh; }));
+    var range = Math.abs(hi - lo) < 0.0001 ? "a flat " + pct(hi) : pct(lo) + " to " + pct(hi);
+
+    var why = {
+      plan5: "Plan 5 charges RPI and nothing else, so the line only moves if RPI does.",
+      plan2: "Plan 2 slides with your income — RPI at the threshold, RPI + 3% past the upper limit — and sits at RPI + 3% all through the course.",
+      plan1: "Plan 1 takes the lower of RPI and the base rate + 1%.",
+      plan4: "Plan 4 takes the lower of RPI and the base rate + 1%."
+    }[$("plan").value] || "";
+
+    // Only worth mentioning where it actually bites.
+    var capped = (a.interestCap != null && hi > a.interestCap + 1e-9)
+      ? " The announced " + pct(a.interestCap, 0) + " cap holds it down to " +
+        E.taxYearLabel(a.interestCapUntil) + ", then lapses."
+      : "";
+
+    return "Charged at " + range + ". " + why + capped;
+  }
+
+  /* ---- 5. where it all ends up ------------------------------------------ *
+   * Two bars of identical length, because they are the same money seen from
+   * each end: borrowed + interest charged = repaid + written off, exactly.
+   * ---------------------------------------------------------------------- */
+
+  function renderFlowChart(sim) {
+    var r = sim.combined;
+    var total = r.borrowed + r.totalInterest;
+    if (!(total > 0)) { $("flowChart").innerHTML = ""; $("flowKey").innerHTML = ""; return; }
+
+    var W = 440, H = 200, ml = 10, mr = 10, iw = W - ml - mr;
+    var barH = 46, gap = 26, top = 30;
+
+    var bar = function (yPos, segs) {
+      var xCur = ml, out = "";
+      segs.forEach(function (s) {
+        var w = (s.value / total) * iw;
+        if (w <= 0) return;
+        out += '<rect x="' + xCur.toFixed(1) + '" y="' + yPos + '" width="' + w.toFixed(1) +
+          '" height="' + barH + '" fill="' + s.colour + '" opacity="' + (s.opacity || 1) + '"/>';
+        // Only label a segment wide enough to hold the words.
+        if (w > 104) {
+          out += '<text x="' + (xCur + 10).toFixed(1) + '" y="' + (yPos + 19) +
+            '" font-size="12.5" font-weight="600" fill="' + (s.ink || "#fff") + '">' + s.label + "</text>" +
+            '<text x="' + (xCur + 10).toFixed(1) + '" y="' + (yPos + 35) +
+            '" font-size="13" fill="' + (s.ink || "#fff") + '" opacity=".88">' + gbp(s.value) + "</text>";
+        }
+        xCur += w;
+      });
+      return out;
+    };
+
+    var charged = [
+      { label: "Borrowed", value: r.borrowed, colour: "var(--ink-soft)" },
+      { label: "Interest charged", value: r.totalInterest, colour: "var(--warn)" }
+    ];
+    var landed = [
+      { label: "You repaid", value: r.totalRepaid, colour: "var(--accent)" },
+      { label: "Written off", value: r.writtenOff || 0, colour: "var(--danger)" }
+    ];
+
+    var caption = function (t, yPos) {
+      return '<text x="' + ml + '" y="' + yPos + '" font-size="12" font-weight="600" ' +
+        'letter-spacing=".05em" fill="var(--ink-mute)">' + t.toUpperCase() + "</text>";
+    };
+
+    $("flowChart").innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="What you were charged, and where it ended up">' +
+      caption("What you were charged", top - 10) + bar(top, charged) +
+      caption("Where it went", top + barH + gap + 10) + bar(top + barH + gap + 20, landed) +
+      "</svg>";
+
+    var perPound = r.perPoundBorrowed;
+    $("flowKey").innerHTML =
+      '<i style="color:var(--ink-soft)">Borrowed</i><i class="k-interest">Interest</i>' +
+      '<i class="k-repaid">Repaid</i>' + ((r.writtenOff || 0) > 0 ? '<i style="color:var(--danger)">Written off</i>' : "") +
+      '<i style="color:var(--ink-mute)">£' + perPound.toFixed(2) + " handed over per £1 borrowed</i>";
+  }
+
+  function renderAllCharts(sim) {
+    renderChart(sim);
+    renderSalaryChart(sim);
+    renderMonthlyChart(sim);
+    renderRateChart(sim);
+    renderFlowChart(sim);
   }
 
   function renderMilestones(sim) {
@@ -505,9 +766,10 @@
       r.months.forEach(function (m) {
         var t = by[m.month] || (by[m.month] = {
           month: m.month, year: m.year, monthNo: m.monthNo, taxYear: m.taxYear,
-          phase: m.phase, salary: 0, drawdown: 0, interest: 0, payment: 0, voluntary: 0, balance: 0
+          phase: m.phase, salary: 0, drawdown: 0, interest: 0, payment: 0, voluntary: 0, balance: 0, rate: null
         });
         t.salary = Math.max(t.salary, m.salary);
+        t.rate = t.rate == null ? m.rate : Math.max(t.rate, m.rate);
         t.drawdown += m.drawdown;
         t.interest += m.interest;
         t.payment += m.payment;
@@ -539,6 +801,7 @@
         '<td class="num">' + (y.phase === "studying" ? "studying" : gbp(y.salary)) + "</td>" +
         '<td class="num">' + (y.phase === "studying" ? "—" : gbp(y.monthlyRepayment)) + "</td>" +
         '<td class="num">' + (due > 0 ? gbp(due) : "—") + "</td>" +
+        '<td class="num">' + rateCell(y) + "</td>" +
         '<td class="num">' + gbp(y.interest) + "</td>" +
         '<td class="num">' + gbp(y.cumRepaid) + "</td>" +
         '<td class="num">' + gbp(y.closingBalance) + "</td></tr>";
@@ -547,12 +810,20 @@
     });
 
     var r = sim.combined;
-    rows += '<tr class="final"><td>Total</td><td class="num"></td><td class="num"></td><td class="num"></td>' +
+    rows += '<tr class="final"><td>Total</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>' +
       '<td class="num">' + gbp(r.totalRepaid) + '</td><td class="num">' + gbp(r.totalInterest) + '</td>' +
       '<td class="num">—</td><td class="num">' +
       (r.everRepaidInFull ? "£0" : gbp(r.writtenOff) + " written off") + "</td></tr>";
 
     body.innerHTML = rows;
+  }
+
+  // A rate that moved within the year is shown as the range it moved across.
+  function rateCell(y) {
+    if (y.rateHigh == null) return "—";
+    return Math.abs(y.rateHigh - y.rateLow) < 0.0001
+      ? pct(y.rateHigh, 2)
+      : pct(y.rateLow, 2) + "–" + pct(y.rateHigh, 2);
   }
 
   function monthRows(y, months) {
@@ -567,12 +838,13 @@
         '<td class="num">' + (m.drawdown ? gbp(m.drawdown) : "—") + "</td>" +
         '<td class="num">' + (m.phase === "repaying" ? gbp(m.salary / 12) : "—") + "</td>" +
         '<td class="num">' + (m.payment + m.voluntary > 0 ? gbp(m.payment + m.voluntary) : "—") + "</td>" +
+        '<td class="num">' + (m.rate != null ? pct(m.rate, 2) : "—") + "</td>" +
         '<td class="num">' + gbp(m.interest) + "</td>" +
         '<td class="num">' + gbp(m.balance) + "</td></tr>";
     }
-    return '<tr class="months"><td colspan="8"><table class="month-table">' +
+    return '<tr class="months"><td colspan="9"><table class="month-table">' +
       "<thead><tr><th>Month</th><th class=\"num\">Borrowed</th><th class=\"num\">Gross pay</th>" +
-      "<th class=\"num\">Deducted</th><th class=\"num\">Interest</th><th class=\"num\">Balance</th></tr></thead>" +
+      "<th class=\"num\">Deducted</th><th class=\"num\">Rate</th><th class=\"num\">Interest</th><th class=\"num\">Balance</th></tr></thead>" +
       "<tbody>" + cells + "</tbody></table></td></tr>";
   }
 
@@ -598,6 +870,8 @@
     var career = CAREERS.filter(function (c) { return c.id === $("career").value; })[0];
     $("careerNote").textContent = career ? career.note : "";
     $("customSalary").hidden = !!(career && career.id !== "custom");
+    markCareer();
+    markLength();
 
     $("predictSummary").innerHTML =
       "Starting on <b>" + gbp(firstSal) + "</b> in " + E.taxYearLabel(start) +
@@ -633,13 +907,14 @@
     if (!lastSim) return "";
     var r = lastSim.combined;
     var head = ["Tax year", "Age", "Phase", "Gross salary", "Threshold", "Monthly repayment",
-      "Repaid in year", "Interest charged", "Borrowed in year", "Repaid to date",
+      "Interest rate", "Repaid in year", "Interest charged", "Borrowed in year", "Repaid to date",
       "Interest to date", "Closing balance", "Closing balance (today's money)"];
     var lines = [head.join(",")];
     r.years.forEach(function (y) {
       lines.push([
         y.label, ageAt(y.taxYear), y.phase,
         Math.round(y.salary), Math.round(y.threshold || 0), Math.round(y.monthlyRepayment),
+        y.rateHigh != null ? (y.rateHigh * 100).toFixed(2) + "%" : "",
         Math.round(y.repaid + y.voluntary), Math.round(y.interest), Math.round(y.borrowed),
         Math.round(y.cumRepaid), Math.round(y.cumInterest),
         Math.round(y.closingBalance), Math.round(y.realClosingBalance)
@@ -706,6 +981,155 @@
       }
       return true;
     } catch (e) { return false; }
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * SLIDERS
+   *
+   * Any number input carrying data-slider="min,max,step" gets a range control
+   * fitted above it. The slider covers the sensible range; the box still
+   * accepts anything outside it, so neither gets in the other's way.
+   * -------------------------------------------------------------------- */
+
+  function fitSliders() {
+    var boxes = document.querySelectorAll("input[data-slider]");
+    Array.prototype.forEach.call(boxes, function (box) {
+      var spec = box.dataset.slider.split(",").map(Number);
+      var lo = spec[0], hi = spec[1], step = spec[2];
+
+      var wrap = box.closest(".money-input, .pct-input") || box;
+      var range = document.createElement("input");
+      range.type = "range";
+      range.className = "range";
+      range.min = lo; range.max = hi; range.step = step;
+      range.value = clamp(parseFloat(box.value) || lo, lo, hi);
+      range.tabIndex = -1;                       // the box itself is the tab stop
+      range.setAttribute("aria-hidden", "true");
+
+      wrap.parentNode.insertBefore(range, wrap);
+
+      range.addEventListener("input", function () {
+        box.value = range.value;
+        box.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      box.addEventListener("input", function () {
+        var v = parseFloat(box.value);
+        if (isFinite(v)) range.value = clamp(v, lo, hi);
+      });
+    });
+  }
+
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  /* ---------------------------------------------------------------------- *
+   * CAREER PATHS, AS CARDS
+   *
+   * The dropdown is kept as the state, hidden, so everything that reads
+   * $("career").value carries on working — the cards just drive it.
+   * -------------------------------------------------------------------- */
+
+  var PATH_MARKS = {
+    custom: "✎", grad: "🎓", tech: "💻", medicine: "🩺", nursing: "💊",
+    teaching: "📚", law: "⚖️", citylaw: "🏙", engineering: "⚙️",
+    finance: "📊", public: "🏛", creative: "🎭", low: "🧭"
+  };
+
+  function buildCareerCards() {
+    var host = $("careerCards");
+    host.innerHTML = CAREERS.map(function (c) {
+      var start = c.points ? c.points[Object.keys(c.points).map(Number).sort(function (a, b) { return a - b; })[0]] : null;
+      return '<button type="button" class="path" role="radio" aria-checked="false" data-career="' + c.id + '">' +
+        '<span class="path__mark" aria-hidden="true">' + (PATH_MARKS[c.id] || "•") + "</span>" +
+        '<span class="path__name">' + c.label + "</span>" +
+        '<span class="path__from">' + (start ? "from " + gbpShort(start) : "your figures") + "</span>" +
+        "</button>";
+    }).join("");
+
+    host.addEventListener("click", function (ev) {
+      var btn = ev.target.closest(".path");
+      if (!btn) return;
+      $("career").value = btn.dataset.career;
+      markCareer();
+      if (state.incomeMode === "manual") { state.manual = {}; buildSalaryTable(); }
+      run();
+    });
+  }
+
+  function markCareer() {
+    var current = $("career").value;
+    Array.prototype.forEach.call($("careerCards").children, function (b) {
+      var on = b.dataset.career === current;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  /* ---- course length, as chips ------------------------------------------ */
+
+  function buildLengthChips() {
+    var host = $("lenChips");
+    host.innerHTML = [2, 3, 4, 5, 6].map(function (n) {
+      return '<button type="button" class="chip" role="radio" aria-checked="false" data-years="' + n + '">' +
+        n + " yrs</button>";
+    }).join("");
+    host.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".chip");
+      if (!b) return;
+      $("courseYears").value = b.dataset.years;
+      markLength();
+      if (state.incomeMode === "manual") { state.manual = {}; buildSalaryTable(); }
+      run();
+    });
+  }
+
+  function markLength() {
+    var n = String(Math.round(num("courseYears", 3)));
+    Array.prototype.forEach.call($("lenChips").children, function (b) {
+      var on = b.dataset.years === n;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * THE RUNNING RAIL
+   *
+   * Sticky beside the controls, so every slider drag moves a number you can
+   * see without scrolling.
+   * -------------------------------------------------------------------- */
+
+  function renderRail(sim) {
+    var r = sim.combined;
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    var first = repaying[0];
+    var peak = repaying.reduce(function (m, y) {
+      return y.monthlyRepayment > m ? y.monthlyRepayment : m;
+    }, 0);
+
+    $("railMonthly").textContent = first ? gbp(first.monthlyRepayment) : "£0";
+    $("railSub").textContent = first
+      ? "a month from " + first.label + ", rising to " + gbp(peak)
+      : "nothing is ever due";
+
+    var rows = [
+      { k: "Borrowed", v: gbp(r.borrowed) },
+      { k: "Owed on day one", v: gbp(r.balanceAtRepayStart) },
+      { k: "Interest charged", v: gbp(r.totalInterest), cls: "is-warn" },
+      { k: "You hand over", v: gbp(r.totalRepaid), cls: "is-good" },
+      { k: "In today's money", v: gbp(r.totalRealRepaid) },
+      r.everRepaidInFull
+        ? { k: "Written off", v: "nothing", cls: "" }
+        : { k: "Written off", v: gbp(r.writtenOff), cls: "is-bad" },
+      { k: "Per £1 borrowed", v: "£" + r.perPoundBorrowed.toFixed(2) }
+    ];
+
+    $("railList").innerHTML = rows.map(function (row) {
+      return "<dt>" + row.k + '</dt><dd class="' + (row.cls || "") + '">' + row.v + "</dd>";
+    }).join("");
+
+    $("railEnd").innerHTML = r.everRepaidInFull
+      ? '<b class="is-good">Cleared in ' + r.clearedLabel + "</b> after " + r.yearsRepaying + " years of repayments."
+      : '<b class="is-bad">Written off in ' + r.writeOffLabel + "</b> — you stop paying whatever is left.";
   }
 
   /* ---------------------------------------------------------------------- *
@@ -783,7 +1207,7 @@
       }
       if (t.id === "hasPgl") $("pglRow").hidden = !t.checked;
       if (t.id === "birthYear" && state.incomeMode === "manual") buildSalaryTable();
-      if (t.id === "career" || t.id === "startYear" || t.id === "courseYears" || t.id === "repayStartYear") {
+      if (t.id === "career" || t.id === "startYear" || t.id === "repayStartYear") {
         if (state.incomeMode === "manual") { state.manual = {}; buildSalaryTable(); }
       }
       run();
@@ -804,7 +1228,7 @@
       b.addEventListener("click", function () {
         state.basis = b.dataset.basis;
         document.querySelectorAll("[data-basis]").forEach(function (o) { o.classList.toggle("on", o === b); });
-        renderChart(lastSim);
+        renderAllCharts(lastSim);
       });
     });
 
@@ -842,6 +1266,8 @@
   function init() {
     fillSelects();
     fillRulesTable();
+    buildCareerCards();
+    buildLengthChips();
     var restored = restore();
     if (!restored) {
       $("plan").value = "plan5";
@@ -855,6 +1281,9 @@
       $("planBlurb").textContent = E.RULES[$("plan").value].blurb;
     });
     if (state.incomeMode === "manual") buildSalaryTable();
+    fitSliders();
+    markCareer();
+    markLength();
     wire();
     run();
   }

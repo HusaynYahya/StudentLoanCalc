@@ -571,7 +571,7 @@
         if (!byYear[y.taxYear]) {
           byYear[y.taxYear] = {
             taxYear: y.taxYear, label: y.label, phase: y.phase,
-            salary: y.salary, threshold: null,
+            salary: y.salary, threshold: null, rateLow: null, rateHigh: null,
             openingBalance: 0, closingBalance: 0,
             borrowed: 0, interest: 0, repaid: 0, voluntary: 0, months: y.months
           };
@@ -579,6 +579,8 @@
         }
         var t = byYear[y.taxYear];
         if (t.threshold == null) t.threshold = y.threshold;
+        t.rateLow = t.rateLow == null ? y.rateLow : Math.min(t.rateLow, y.rateLow);
+        t.rateHigh = t.rateHigh == null ? y.rateHigh : Math.max(t.rateHigh, y.rateHigh);
         t.openingBalance += y.openingBalance;
         t.closingBalance += y.closingBalance;
         t.borrowed += y.borrowed;
