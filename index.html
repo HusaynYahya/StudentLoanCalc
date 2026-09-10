@@ -3,378 +3,342 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="description" content="A UK student loan repayment simulator. Set a course and a salary — predicted or typed in year by year — and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
-<meta name="color-scheme" content="light dark" />
-<title>Student loan repayment simulator</title>
+<meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
+<meta name="color-scheme" content="dark" />
+<title>Student loan · repayment model</title>
 <link rel="stylesheet" href="loan.css" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M12 74 L38 46 L58 62 L88 26' fill='none' stroke='%232f6f5e' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
-<a class="skip-link" href="#result">Skip to the results</a>
+<a class="skip-link" href="#main">Skip to the results</a>
 
-<header class="masthead">
-  <div class="wrap">
-    <p class="eyebrow">UK student finance</p>
-    <h1>Student loan repayment simulator</h1>
-    <p class="lede">
-      Repayment is not a debt schedule. It is a 9% graduate tax on everything you earn
-      above a threshold, for a fixed number of years, and then it stops — paid off or not.
-      Set out a course and an income below and read the whole ledger, year by year.
-    </p>
-  </div>
-</header>
+<div class="app">
 
-<main class="wrap">
+  <!-- ==================================================================== -->
+  <!-- CONTROLS                                                             -->
+  <!-- ==================================================================== -->
+  <aside class="panel" aria-label="Controls">
 
-  <div class="dash">
-  <div class="dash__controls">
+    <header class="panel__head">
+      <p class="brand">UK&nbsp;student&nbsp;finance</p>
+      <h1>Repayment model</h1>
+    </header>
 
-  <form id="form" novalidate>
+    <form id="form" novalidate>
 
-  <!-- ================================================================== -->
-  <section class="panel" aria-labelledby="h-income">
-    <h2 id="h-income"><span class="step">1</span> Your path</h2>
-
-    <div class="tabs" role="tablist" aria-label="How to set the salary">
-      <button type="button" role="tab" id="tab-predict" aria-controls="pane-predict" aria-selected="true" data-tab="predict">Pick a career</button>
-      <button type="button" role="tab" id="tab-manual" aria-controls="pane-manual" aria-selected="false" data-tab="manual">Type each year</button>
-    </div>
-
-    <div class="pane" id="pane-predict" role="tabpanel" aria-labelledby="tab-predict">
-      <div class="paths" id="careerCards" role="radiogroup" aria-label="Career path"></div>
-      <select id="career" class="sr-only" tabindex="-1" aria-hidden="true"></select>
-      <p class="hint" id="careerNote"></p>
-
-      <div id="customSalary">
-        <div class="field slide">
-          <label for="startSalary">Starting salary</label>
-          <div class="money-input"><span>£</span><input type="number" id="startSalary" min="0" max="500000" step="500" value="30000" data-slider="15000,150000,500" /></div>
+      <!-- ---- path ---- -->
+      <section class="grp">
+        <div class="grp__head">
+          <h2>Your path</h2>
+          <div class="seg" role="tablist" aria-label="How to set the salary">
+            <button type="button" role="tab" id="tab-predict" aria-controls="pane-predict" aria-selected="true" data-tab="predict">Career</button>
+            <button type="button" role="tab" id="tab-manual" aria-controls="pane-manual" aria-selected="false" data-tab="manual">By year</button>
+          </div>
         </div>
-        <div class="field slide">
-          <label for="salaryGrowth">Pay rise a year</label>
-          <div class="pct-input"><input type="number" id="salaryGrowth" min="-5" max="20" step="0.1" value="4" data-slider="0,12,0.1" /><span>%</span></div>
-          <p class="hint">Above inflation is a real rise; at inflation you stand still.</p>
+
+        <div class="pane" id="pane-predict" role="tabpanel" aria-labelledby="tab-predict">
+          <div class="picks" id="careerCards" role="radiogroup" aria-label="Career path"></div>
+          <select id="career" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+          <p class="note" id="careerNote"></p>
+
+          <div id="customSalary">
+            <div class="ctl">
+              <div class="ctl__top">
+                <label for="startSalary">Starting salary</label>
+                <span class="ctl__val"><i>£</i><input type="number" id="startSalary" min="0" max="500000" step="500" value="30000" data-slider="15000,150000,500" /></span>
+              </div>
+            </div>
+            <div class="ctl">
+              <div class="ctl__top">
+                <label for="salaryGrowth">Pay rise a year</label>
+                <span class="ctl__val"><input type="number" id="salaryGrowth" min="-5" max="20" step="0.1" value="4" data-slider="0,12,0.1" /><i>%</i></span>
+              </div>
+            </div>
+          </div>
+          <p class="readout" id="predictSummary"></p>
         </div>
-      </div>
-      <p class="callout" id="predictSummary"></p>
-    </div>
 
-    <div class="pane" id="pane-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
-      <p class="hint">
-        Pre-filled from the career you picked — change any year. Leave a year at £0 for a
-        career break, a year out or further study. Past the last row it carries on at the
-        rate of inflation.
-      </p>
-      <div class="table-scroll">
-        <table class="salary-table">
-          <thead><tr><th scope="col">Tax year</th><th scope="col">Age</th><th scope="col">Gross salary</th></tr></thead>
-          <tbody id="salaryRows"></tbody>
-        </table>
-      </div>
-      <div class="row-actions">
-        <button type="button" class="btn btn--quiet" id="addYears">Add five more years</button>
-        <button type="button" class="btn btn--quiet" id="resetSalaries">Reset to the career</button>
-      </div>
-    </div>
-  </section>
+        <div class="pane" id="pane-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
+          <p class="note">Pre-filled from the career you picked. £0 for a career break. Past the last row it carries on with inflation.</p>
+          <table class="years">
+            <thead><tr><th scope="col">Year</th><th scope="col">Age</th><th scope="col">Salary</th></tr></thead>
+            <tbody id="salaryRows"></tbody>
+          </table>
+          <div class="btnrow">
+            <button type="button" class="btn" id="addYears">+5 years</button>
+            <button type="button" class="btn" id="resetSalaries">Reset</button>
+          </div>
+        </div>
+      </section>
 
-  <!-- ================================================================== -->
-  <section class="panel" aria-labelledby="h-loan">
-    <h2 id="h-loan"><span class="step">2</span> The loan</h2>
+      <!-- ---- loan ---- -->
+      <section class="grp">
+        <div class="grp__head">
+          <h2>The loan</h2>
+          <div class="seg" role="tablist" aria-label="How to describe the loan">
+            <button type="button" role="tab" id="tab-course" aria-controls="pane-course" aria-selected="true" data-tab="course">Course</button>
+            <button type="button" role="tab" id="tab-balance" aria-controls="pane-balance" aria-selected="false" data-tab="balance">Balance</button>
+          </div>
+        </div>
 
-    <div class="field">
-      <label for="plan">Repayment plan</label>
-      <select id="plan" name="plan"></select>
-      <p class="hint" id="planBlurb"></p>
-    </div>
+        <div class="ctl">
+          <div class="ctl__top"><label for="plan">Plan</label></div>
+          <select id="plan"></select>
+          <p class="note" id="planBlurb"></p>
+        </div>
 
-    <div class="tabs" role="tablist" aria-label="How to describe the loan">
-      <button type="button" role="tab" id="tab-course" aria-controls="pane-course" aria-selected="true" data-tab="course">From the course</button>
-      <button type="button" role="tab" id="tab-balance" aria-controls="pane-balance" aria-selected="false" data-tab="balance">I know my balance</button>
-    </div>
+        <div class="pane" id="pane-course" role="tabpanel" aria-labelledby="tab-course">
+          <div class="ctl">
+            <div class="ctl__top"><label id="lenLabel">Length</label></div>
+            <div class="chips" role="radiogroup" aria-labelledby="lenLabel" id="lenChips"></div>
+            <input type="hidden" id="courseYears" value="3" />
+          </div>
 
-    <div class="pane" id="pane-course" role="tabpanel" aria-labelledby="tab-course">
-      <div class="field">
-        <label id="lenLabel">Length of course</label>
-        <div class="chips" role="radiogroup" aria-labelledby="lenLabel" id="lenChips"></div>
-        <input type="hidden" id="courseYears" value="3" />
-      </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="startYear">Starts September</label>
+              <span class="ctl__val"><input type="number" id="startYear" min="2015" max="2040" step="1" value="2026" data-slider="2020,2035,1" /></span>
+            </div>
+          </div>
 
-      <div class="field">
-        <label for="startYear">First September</label>
-        <input type="number" id="startYear" min="2015" max="2040" step="1" value="2026" data-slider="2020,2035,1" />
-        <p class="hint" id="startHint"></p>
-      </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="tuition">Tuition a year</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="tuition" min="0" max="30000" step="10" value="9790" data-slider="0,12000,10" /></span>
+            </div>
+          </div>
 
-      <div class="field slide">
-        <label for="tuition">Tuition fee loan, a year</label>
-        <div class="money-input"><span>£</span><input type="number" id="tuition" min="0" max="30000" step="10" value="9790" data-slider="0,12000,10" /></div>
-        <p class="hint">The 2026/27 cap in England is £9,790.</p>
-      </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="maintenance">Maintenance a year</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="maintenance" min="0" max="30000" step="10" value="10830" data-slider="0,16000,10" /></span>
+            </div>
+            <select id="living"></select>
+          </div>
 
-      <div class="field slide">
-        <label for="living">Maintenance loan, a year</label>
-        <select id="living"></select>
-        <div class="money-input"><span>£</span><input type="number" id="maintenance" min="0" max="30000" step="10" value="10830" data-slider="0,16000,10" /></div>
-        <p class="hint">Means-tested on household income — type the real figure if you have it.</p>
-      </div>
+          <p class="readout" id="borrowSummary"></p>
+          <p class="note" id="startHint"></p>
+        </div>
 
-      <p class="callout" id="borrowSummary"></p>
-    </div>
+        <div class="pane" id="pane-balance" role="tabpanel" aria-labelledby="tab-balance" hidden>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="openingBalance">Owed today</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="openingBalance" min="0" max="500000" step="100" value="52000" data-slider="0,150000,500" /></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="repayStartYear">First April due</label>
+              <span class="ctl__val"><input type="number" id="repayStartYear" min="2000" max="2050" step="1" value="2026" data-slider="2010,2040,1" /></span>
+            </div>
+            <p class="note">What the write-off clock counts from.</p>
+          </div>
+        </div>
+      </section>
 
-    <div class="pane" id="pane-balance" role="tabpanel" aria-labelledby="tab-balance" hidden>
-      <div class="field slide">
-        <label for="openingBalance">Balance owed today</label>
-        <div class="money-input"><span>£</span><input type="number" id="openingBalance" min="0" max="500000" step="100" value="52000" data-slider="0,150000,500" /></div>
-      </div>
-      <div class="field">
-        <label for="repayStartYear">First April you were due to repay</label>
-        <input type="number" id="repayStartYear" min="2000" max="2050" step="1" value="2026" data-slider="2010,2040,1" />
-        <p class="hint">What the write-off clock counts from — not the date you graduated.</p>
-      </div>
-    </div>
+      <!-- ---- extras ---- -->
+      <section class="grp">
+        <div class="grp__head"><h2>Also</h2></div>
 
-    <div class="field checkbox">
-      <input type="checkbox" id="hasPgl" />
-      <label for="hasPgl">I also have a postgraduate loan</label>
-    </div>
-    <div id="pglRow" hidden>
-      <div class="field slide">
-        <label for="pglBalance">Postgraduate loan borrowed</label>
-        <div class="money-input"><span>£</span><input type="number" id="pglBalance" min="0" max="60000" step="100" value="12471" data-slider="0,30000,100" /></div>
-        <p class="hint">6% above £21,000, alongside the undergraduate plan — 15% where both bite.</p>
-      </div>
-    </div>
+        <label class="check"><input type="checkbox" id="hasPgl" /> <span>Postgraduate loan too</span></label>
+        <div id="pglRow" hidden>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="pglBalance">Postgraduate borrowed</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="pglBalance" min="0" max="60000" step="100" value="12471" data-slider="0,30000,100" /></span>
+            </div>
+            <p class="note">6% above £21,000, alongside the undergraduate plan.</p>
+          </div>
+        </div>
 
-    <div class="grid">
-      <div class="field">
-        <label for="birthYear">Year of birth <span class="opt">(optional)</span></label>
-        <input type="number" id="birthYear" min="1940" max="2020" step="1" placeholder="e.g. 2008" />
-        <p class="hint">Only used to put an age against each row.</p>
-      </div>
-      <div class="field slide">
-        <label for="overpay">Voluntary overpayment, a month</label>
-        <div class="money-input"><span>£</span><input type="number" id="overpay" min="0" max="5000" step="10" value="0" data-slider="0,1000,10" /></div>
-        <p class="hint">Test it before you do it. It often buys nothing.</p>
-      </div>
-    </div>
-  </section>
+        <div class="ctl">
+          <div class="ctl__top">
+            <label for="overpay">Overpay a month</label>
+            <span class="ctl__val"><i>£</i><input type="number" id="overpay" min="0" max="5000" step="10" value="0" data-slider="0,1000,10" /></span>
+          </div>
+          <p class="note">Test it first. It often buys nothing.</p>
+        </div>
 
-  <!-- ================================================================== -->
-  <details class="panel panel--details">
-    <summary><h2><span class="step">3</span> Assumptions</h2><span class="summary-note">The things nobody can know for forty years</span></summary>
-    <div class="details-body">
-      <div class="field slide">
-        <label for="rpi">RPI</label>
-        <div class="pct-input"><input type="number" id="rpi" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><span>%</span></div>
-        <p class="hint">Sets the interest rate. March 2026: 4.1%.</p>
-      </div>
-      <div class="field slide">
-        <label for="thresholdGrowth">Thresholds rise by</label>
-        <div class="pct-input"><input type="number" id="thresholdGrowth" min="0" max="20" step="0.1" value="3.6" data-slider="0,8,0.1" /><span>%</span></div>
-        <p class="hint">Once any freeze expires. Set below inflation because that is what has happened —
-          thresholds have been frozen more often than raised. This moves the answer more than anything else.</p>
-      </div>
-      <div class="field slide">
-        <label for="inflation">Inflation</label>
-        <div class="pct-input"><input type="number" id="inflation" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><span>%</span></div>
-        <p class="hint">Used to restate everything in today's money.</p>
-      </div>
-      <div class="field slide">
-        <label for="bankBase">Bank base rate</label>
-        <div class="pct-input"><input type="number" id="bankBase" min="0" max="20" step="0.1" value="3.75" data-slider="0,10,0.25" /><span>%</span></div>
-        <p class="hint">Caps Plan 1 and Plan 4 at base + 1%.</p>
-      </div>
-      <div class="field checkbox">
-        <input type="checkbox" id="useCap" checked />
-        <label for="useCap">Apply the announced 6% cap (it runs to August 2027 only)</label>
-      </div>
-    </div>
-  </details>
+        <div class="ctl">
+          <div class="ctl__top">
+            <label for="birthYear">Born <span class="opt">optional</span></label>
+            <span class="ctl__val"><input type="number" id="birthYear" min="1940" max="2020" step="1" placeholder="2008" /></span>
+          </div>
+        </div>
+      </section>
 
-  </form>
-  </div>
+      <!-- ---- assumptions ---- -->
+      <details class="grp grp--fold">
+        <summary><h2>Assumptions</h2><span>the unknowables</span></summary>
+        <div class="fold">
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="rpi">RPI</label>
+              <span class="ctl__val"><input type="number" id="rpi" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><i>%</i></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="thresholdGrowth">Thresholds rise</label>
+              <span class="ctl__val"><input type="number" id="thresholdGrowth" min="0" max="20" step="0.1" value="3.6" data-slider="0,8,0.1" /><i>%</i></span>
+            </div>
+            <p class="note">Below inflation, because that is what has happened. Moves the answer more than anything else here.</p>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="inflation">Inflation</label>
+              <span class="ctl__val"><input type="number" id="inflation" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><i>%</i></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="bankBase">Base rate</label>
+              <span class="ctl__val"><input type="number" id="bankBase" min="0" max="20" step="0.1" value="3.75" data-slider="0,10,0.25" /><i>%</i></span>
+            </div>
+            <p class="note">Caps Plan 1 and Plan 4 at base + 1%.</p>
+          </div>
+          <label class="check"><input type="checkbox" id="useCap" checked /> <span>Apply the announced 6% cap</span></label>
+        </div>
+      </details>
 
-  <!-- ================================================================== -->
-  <aside class="dash__rail" aria-label="Running totals">
-    <div class="rail">
-      <p class="rail__eyebrow">Out of your pay</p>
-      <p class="rail__big" id="railMonthly">£0</p>
-      <p class="rail__sub" id="railSub">a month</p>
-
-      <dl class="rail__list" id="railList"></dl>
-
-      <p class="rail__end" id="railEnd"></p>
-    </div>
+    </form>
   </aside>
-  </div>
 
-  <!-- ================================================================== -->
-  <section class="result" id="result" aria-live="polite" aria-labelledby="h-result">
-    <h2 id="h-result" class="sr-only">Results</h2>
+  <!-- ==================================================================== -->
+  <!-- RESULTS                                                              -->
+  <!-- ==================================================================== -->
+  <main class="main" id="main">
 
-    <div class="verdict" id="verdict"></div>
-
-    <div class="stats" id="stats"></div>
-
-    <div class="sensitivity-block">
-      <h3>How much does the guesswork matter?</h3>
-      <p class="hint">
-        Two of the assumptions decide almost everything, and neither is knowable. This is the same
-        scenario run again with each of them moved, so you can see how much of the answer is the
-        rules and how much is the guess.
-      </p>
-      <div class="table-scroll">
-        <table class="sens" id="sensTable"></table>
+    <header class="hero" aria-live="polite">
+      <div class="hero__lead">
+        <p class="hero__label" id="heroLabel">You hand over</p>
+        <p class="hero__fig" id="heroFig">£0</p>
+        <p class="hero__sub" id="heroSub"></p>
       </div>
-    </div>
+      <dl class="hero__stats" id="heroStats"></dl>
+    </header>
 
-    <div class="chart-controls">
-      <div class="toggle" role="group" aria-label="Money basis">
-        <button type="button" class="on" data-basis="cash">Cash of the day</button>
+    <div class="bar">
+      <div class="seg seg--sm" role="group" aria-label="Money basis">
+        <button type="button" class="on" data-basis="cash">Cash</button>
         <button type="button" data-basis="real">Today's money</button>
       </div>
     </div>
 
-    <div class="charts">
+    <section class="cards">
 
-      <figure class="chart-block chart-block--wide">
-        <figcaption>
-          <h3>The balance, and what you have paid</h3>
-          <p>The grey line is what you owe. It usually rises for years before it falls.</p>
-        </figcaption>
-        <div id="chart" class="chart"></div>
-        <p class="chart-key" id="chartKey"></p>
+      <figure class="card card--wide">
+        <figcaption><h3>Balance, repayments and interest</h3>
+          <p>What you owe usually climbs for years before it falls.</p></figcaption>
+        <div id="chart" class="viz"></div>
+        <p class="key" id="chartKey"></p>
       </figure>
 
-      <figure class="chart-block">
-        <figcaption>
-          <h3>Your salary against the threshold</h3>
-          <p>You pay 9% of the shaded gap — nothing on the rest.</p>
-        </figcaption>
-        <div id="salaryChart" class="chart"></div>
-        <p class="chart-key" id="salaryKey"></p>
+      <figure class="card">
+        <figcaption><h3>Salary against the threshold</h3>
+          <p>You pay 9% of the shaded gap. Nothing on the rest.</p></figcaption>
+        <div id="salaryChart" class="viz"></div>
+        <p class="key" id="salaryKey"></p>
       </figure>
 
-      <figure class="chart-block">
-        <figcaption>
-          <h3>What leaves your pay each month</h3>
-          <p>The figure you would actually notice on a payslip.</p>
-        </figcaption>
-        <div id="monthlyChart" class="chart"></div>
-        <p class="chart-key" id="monthlyKey"></p>
+      <figure class="card">
+        <figcaption><h3>Out of your pay, monthly</h3>
+          <p>The figure you would notice on a payslip.</p></figcaption>
+        <div id="monthlyChart" class="viz"></div>
+        <p class="key" id="monthlyKey"></p>
       </figure>
 
-      <figure class="chart-block">
-        <figcaption>
-          <h3>The interest rate you are charged</h3>
-          <p id="rateNote"></p>
-        </figcaption>
-        <div id="rateChart" class="chart"></div>
-        <p class="chart-key" id="rateKey"></p>
+      <figure class="card">
+        <figcaption><h3>Interest rate charged</h3>
+          <p id="rateNote"></p></figcaption>
+        <div id="rateChart" class="viz"></div>
+        <p class="key" id="rateKey"></p>
       </figure>
 
-      <figure class="chart-block">
-        <figcaption>
-          <h3>Where it all ends up</h3>
-          <p>Both bars are the same length: what you were charged has to go somewhere.</p>
-        </figcaption>
-        <div id="flowChart" class="chart"></div>
-        <p class="chart-key" id="flowKey"></p>
+      <figure class="card">
+        <figcaption><h3>Where it ends up</h3>
+          <p>Both bars are the same length. The money has to go somewhere.</p></figcaption>
+        <div id="flowChart" class="viz"></div>
+        <p class="key" id="flowKey"></p>
       </figure>
 
-    </div>
+      <figure class="card card--wide">
+        <figcaption><h3>How much of this is guesswork</h3>
+          <p>The same scenario re-run with each unknowable moved. The spread is the honest error bar.</p></figcaption>
+        <table class="sens" id="sensTable"></table>
+      </figure>
 
-    <div class="milestones-block">
-      <h3>What happens, and when</h3>
-      <ol class="milestones" id="milestones"></ol>
-    </div>
+      <figure class="card card--wide">
+        <figcaption><h3>What happens, and when</h3></figcaption>
+        <ol class="stones" id="milestones"></ol>
+      </figure>
 
-    <div class="log-block">
-      <div class="chart-head">
-        <h3>The log</h3>
-        <div class="log-actions">
-          <button type="button" class="btn btn--quiet" id="toggleZeros">Hide the years with nothing to pay</button>
-          <button type="button" class="btn btn--quiet" id="downloadCsv">Download as CSV</button>
+    </section>
+
+    <section class="card card--flat" aria-labelledby="h-log">
+      <div class="card__bar">
+        <h3 id="h-log">The log</h3>
+        <div class="btnrow">
+          <button type="button" class="btn" id="toggleZeros">Hide empty years</button>
+          <button type="button" class="btn" id="downloadCsv">CSV</button>
         </div>
       </div>
-      <p class="hint">Select a year to open its twelve months.</p>
-      <div class="table-scroll">
+      <p class="note">Select a year to open its twelve months.</p>
+      <div class="scroll">
         <table class="log">
           <thead>
             <tr>
               <th scope="col">Tax year</th>
-              <th scope="col" class="num">Age</th>
-              <th scope="col" class="num">Salary</th>
-              <th scope="col" class="num">A month</th>
-              <th scope="col" class="num">Paid that year</th>
-              <th scope="col" class="num">Rate</th>
-              <th scope="col" class="num">Interest</th>
-              <th scope="col" class="num">Paid off so far</th>
-              <th scope="col" class="num">Balance</th>
+              <th scope="col" class="n">Age</th>
+              <th scope="col" class="n">Salary</th>
+              <th scope="col" class="n">Monthly</th>
+              <th scope="col" class="n">Paid</th>
+              <th scope="col" class="n">Rate</th>
+              <th scope="col" class="n">Interest</th>
+              <th scope="col" class="n">Paid to date</th>
+              <th scope="col" class="n">Balance</th>
             </tr>
           </thead>
           <tbody id="logRows"></tbody>
         </table>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- ================================================================== -->
-  <section class="notes" aria-labelledby="h-notes">
-    <h2 id="h-notes">The rules this follows</h2>
+    <section class="card card--flat notes" aria-labelledby="h-rules">
+      <h3 id="h-rules">The rules this follows</h3>
+      <div class="scroll">
+        <table class="rules">
+          <thead><tr><th scope="col">Plan</th><th scope="col">Who</th><th scope="col" class="n">Threshold</th><th scope="col" class="n">Rate</th><th scope="col">Interest</th><th scope="col" class="n">Written off</th></tr></thead>
+          <tbody id="rulesRows"></tbody>
+        </table>
+      </div>
+      <ul>
+        <li><b>Deductions look at the month, not the year.</b> 9% of whatever that month's gross pay
+          exceeds a twelfth of the annual threshold, rounded down to a whole pound.</li>
+        <li><b>Interest starts with the first instalment</b>, in the September the course begins — not
+          on graduation. That is why the balance on the first April exceeds what was borrowed.</li>
+        <li><b>Repayment begins the April after the course ends</b>, and the write-off clock counts
+          from that April.</li>
+        <li><b>The write-off is unconditional.</b> Whatever is left on the anniversary goes, however
+          large. For most Plan 5 borrowers that, not a final payment, is how the loan ends.</li>
+        <li><b>Interest is charged monthly here</b>, at a twelfth of the annual rate. The Student Loans
+          Company charges it daily; over forty years that is a rounding error beside RPI.</li>
+        <li><b>An undergraduate plan and a postgraduate loan run side by side</b>, each against its own
+          threshold — 9% and 6%, so 15% where both bite.</li>
+      </ul>
+      <p>
+        Nothing here is a forecast. A forty-year projection turns entirely on RPI, on how fast the
+        thresholds are uprated and on a salary nobody can know — and governments have changed all
+        three, retrospectively, more than once. For your own balance and plan type, sign in to your
+        Student Loans Company account; for the rules as they stand, see
+        <a href="https://www.gov.uk/repaying-your-student-loan" rel="noopener">gov.uk/repaying-your-student-loan</a>.
+        2026/27 thresholds and the rates announced for 1 September 2026 to 31 August 2027. Not financial advice.
+      </p>
+    </section>
 
-    <div class="table-scroll">
-      <table class="rules-table">
-        <thead>
-          <tr><th scope="col">Plan</th><th scope="col">Who</th><th scope="col" class="num">Threshold</th><th scope="col" class="num">Rate</th><th scope="col">Interest</th><th scope="col" class="num">Written off</th></tr>
-        </thead>
-        <tbody id="rulesRows"></tbody>
-      </table>
-    </div>
-
-    <h3>How the arithmetic works</h3>
-    <ul>
-      <li><strong>Deductions look at the month, not the year.</strong> PAYE takes 9% of whatever
-        that month's gross pay exceeds a twelfth of the annual threshold, rounded down to a whole
-        pound. A month you earn nothing, you pay nothing, however good the rest of the year was.</li>
-      <li><strong>Interest starts with the first instalment</strong>, in the September the course
-        begins — not on graduation. Three years of that is why the balance on the first April is
-        larger than the sum of what was borrowed.</li>
-      <li><strong>Repayment begins the April after the course ends</strong>, and the write-off clock
-        counts from that April, not from graduation.</li>
-      <li><strong>Interest is charged monthly here</strong>, at a twelfth of the annual rate. The
-        Student Loans Company charges it daily; over forty years the difference is a rounding error
-        beside the uncertainty in RPI.</li>
-      <li><strong>The write-off is unconditional.</strong> Whatever is left on the anniversary goes,
-        however large. For most Plan 5 borrowers that, not the final payment, is how the loan ends.</li>
-      <li><strong>An undergraduate plan and a postgraduate loan run side by side</strong>, each
-        against its own threshold — 9% and 6%, so 15% across the band where both apply.</li>
-    </ul>
-
-    <h3>What this cannot tell you</h3>
-    <p>
-      Nothing here is a forecast. A forty-year projection turns entirely on RPI, on how fast the
-      thresholds are uprated, and on a salary line nobody can know — and governments have changed
-      all three, retrospectively, more than once. Treat it as a way of seeing how the rules behave
-      under an assumption you have chosen, and change the assumption to see how much it mattered.
-      For your own actual balance and plan type, sign in to your Student Loans Company repayment
-      account; for the rules as they stand, read
-      <a href="https://www.gov.uk/repaying-your-student-loan" rel="noopener">gov.uk/repaying-your-student-loan</a>.
-    </p>
-    <p class="fineprint">
-      Figures are the 2026/27 thresholds and the interest rates announced for 1 September 2026 to
-      31 August 2027. This is not financial advice.
-    </p>
-  </section>
-
-</main>
-
-<footer class="foot">
-  <div class="wrap">
-    <p>Open <code>index.html</code> — nothing to build, nothing loaded from anywhere else.</p>
-  </div>
-</footer>
+  </main>
+</div>
 
 <script src="engine.js"></script>
 <script src="loan.js" defer></script>

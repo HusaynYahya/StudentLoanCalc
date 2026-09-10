@@ -8,8 +8,8 @@ Open `index.html`. No build step, no framework, no network requests.
 
 ```
 ├── index.html            the page, the form and the reference notes
-├── loan.css              styles; design tokens at the top, light and dark
-├── loan.js               the interface: dashboard, sliders, charts, log, CSV
+├── loan.css              styles; design tokens at the top
+├── loan.js               the interface: panel, sliders, charts, log, CSV
 ├── engine.js             the rules and the month-by-month simulation
 └── test/engine.test.js   tests for the engine — node test/engine.test.js
 ```
@@ -17,22 +17,24 @@ Open `index.html`. No build step, no framework, no network requests.
 `engine.js` is pure — circumstances in, ledger out, no DOM — and loads under
 both `<script>` and `require()`, which is how the tests run it.
 
-## The dashboard
+## The interface
 
-Controls on the left, a running total pinned beside them on the right. Every
-slider drag moves the numbers in that rail without scrolling: what leaves your
-pay each month, what you hand over in the end, what gets written off.
+A split-screen instrument, dark and numbers-first. Controls are pinned in a
+panel on the left that scrolls on its own; results fill the right and scroll
+independently, with the headline figure sticky at the top so it never leaves
+view while you work.
 
-**Career paths.** Thirteen of them as pickable cards — doctor, engineer,
-teacher, nurse, solicitor, software, accountancy, civil service, arts, and a
-plain "set it myself". Each is a curve of anchor salaries in *today's* money
-(first year, third, sixth, tenth, twentieth), interpolated geometrically, with
-inflation added on top when it becomes cash. Illustrative starting points, not
-forecasts — they exist to be edited.
+**Sliders.** Any number carrying `data-slider="min,max,step"` gets a range
+control fitted under its label automatically. The value sits on the label line
+as an editable figure rather than a second box — one control, not two. The
+slider covers the sensible range; typing still accepts anything outside it.
 
-**Sliders.** Any number box carrying `data-slider="min,max,step"` gets a range
-control fitted above it automatically. The slider covers the sensible range;
-the box still accepts anything outside it, so neither gets in the other's way.
+**Career paths.** Thirteen as a compact two-column list — doctor, engineer,
+teacher, nurse, solicitor, City law, software, accountancy, civil service,
+arts, low-earning, and "set it myself". Each is a curve of anchor salaries in
+*today's* money (first year, third, sixth, tenth, twentieth), interpolated
+geometrically, with inflation added when it becomes cash. Illustrative starting
+points, not forecasts — they exist to be edited.
 
 ## The five charts
 
@@ -44,7 +46,8 @@ the box still accepts anything outside it, so neither gets in the other's way.
 | **The interest rate** | A step line per loan against RPI, so Plan 2's slide with income and the cap lapsing are both visible |
 | **Where it ends up** | Two bars of identical length, because they are the same money from each end: borrowed + interest = repaid + written off, exactly |
 
-A cash / today's-money toggle redraws all of them.
+A cash / today's-money toggle redraws all of them. Below the charts sit the
+sensitivity panel, the milestones, the year-by-year log and the rules.
 
 ## The two ways to give it an income
 
