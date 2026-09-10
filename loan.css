@@ -608,3 +608,27 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   border: 0; background: none; color: var(--ink-4); padding: .1rem .3rem; border-radius: 4px;
 }
 .brk__x:hover { color: var(--bad); background: var(--bg-4); }
+
+/* ---- the three choices, as a table with headings ----------------------- */
+
+.fgroup--wide { grid-column: 1 / -1; }
+.choices { width: 100%; border-collapse: collapse; }
+.choices thead th {
+  text-align: left; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700; padding: 0 .55rem .35rem;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.choices thead th.n, .choices td.n { text-align: right; }
+.choices tbody th {
+  text-align: left; font-weight: 500; font-size: .82rem; color: var(--ink-2);
+  padding: .45rem .55rem; border-bottom: 1px solid var(--line);
+}
+.choices tbody th span { display: block; font-size: .7rem; color: var(--ink-4); font-weight: 400; }
+.choices td {
+  padding: .45rem .55rem; border-bottom: 1px solid var(--line);
+  font-family: var(--num); font-variant-numeric: tabular-nums;
+  font-size: .84rem; color: var(--ink-3); white-space: nowrap;
+}
+.choices td.lead { font-size: 1rem; color: var(--ink); }
+.choices tr.is-win th, .choices tr.is-win td.lead { color: var(--good); }
+.choices tr.is-win th span { color: var(--good); opacity: .8; }

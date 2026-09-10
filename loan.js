@@ -1186,15 +1186,7 @@
         v: r.everRepaidInFull ? r.clearedLabel : gbp(r.writtenOff) + " in " + r.writeOffLabel,
         c: r.everRepaidInFull ? "good" : "bad" },
 
-      { g: g3, k: "Borrow and repay", v: money(o.fvRepayments, o.realFvRepayments),
-        c: o.cheapest && o.cheapest.key === "repay" ? "good" : "" },
-      { g: g3, k: "Pay the fees in cash", v: money(o.fvUpfront, o.realFvUpfront),
-        c: o.cheapest && o.cheapest.key === "upfront" ? "good" : "" },
-      { g: g3, k: "Clear the balance today", v: money(o.fvLump, o.realFvLump),
-        c: o.cheapest && o.cheapest.key === "clear" ? "good" : "" },
-      { g: g3, k: "Cheapest", v: o.cheapest ? o.cheapest.label : "\u2014", c: "good" },
-      { g: g3, k: "In cash, before any of that",
-        v: gbp(r.totalRepaid) + " / " + gbp(o.upfrontPaid) + " / " + gbp(o.lump) }
+      { g: "What you pay", k: "\u00a0", v: "" }
     ];
 
     var groups = [];
@@ -1204,11 +1196,42 @@
       g.rows.push(row);
     });
 
+    var choices = [
+      { key: "repay",   k: "Borrow and repay",       cash: r.totalRepaid,  fv: o.fvRepayments, real: o.realFvRepayments,
+        why: "deductions spread over " + r.yearsRepaying + " years" },
+      { key: "upfront", k: "Pay the fees in cash",   cash: o.upfrontPaid,  fv: o.fvUpfront,    real: o.realFvUpfront,
+        why: "all of it during the course" },
+      { key: "clear",   k: "Clear the balance today", cash: o.lump,        fv: o.fvLump,       real: o.realFvLump,
+        why: "one payment, now" }
+    ].filter(function (c) { return c.cash > 0; })
+     // With an opening balance there are no fees to find, so "pay your own
+     // way" and "clear it today" are the same act — list it once.
+     .filter(function (c, i, all) {
+       return !all.some(function (other, k) {
+         return k < i && Math.abs(other.cash - c.cash) < 1 && Math.abs(other.fv - c.fv) < 1;
+       });
+     });
+
+    var table = '<div class="fgroup fgroup--wide"><h4>' + g3 + "</h4>" +
+      '<table class="choices"><thead><tr><th scope="col"></th>' +
+      '<th scope="col" class="n">In cash</th><th scope="col" class="n">Worth at ' + endLabel + "</th>" +
+      "</tr></thead><tbody>" +
+      choices.map(function (c) {
+        var win = o.cheapest && o.cheapest.key === c.key;
+        return '<tr class="' + (win ? "is-win" : "") + '">' +
+          "<th scope=\"row\">" + c.k + "<span>" + c.why + (win ? " \u00b7 cheapest" : "") + "</span></th>" +
+          '<td class="n">' + gbp(c.cash) + "</td>" +
+          '<td class="n lead">' + money(c.fv, c.real) + "</td></tr>";
+      }).join("") +
+      "</tbody></table></div>";
+
     $("focusGrid").innerHTML = groups.map(function (g) {
-      return '<div class="fgroup"><h4>' + g.name + "</h4><dl>" + g.rows.map(function (row) {
+      return '<div class="fgroup"><h4>' + g.name + "</h4><dl>" + g.rows.filter(function (row) {
+        return row.v !== "";
+      }).map(function (row) {
         return "<div><dt>" + row.k + '</dt><dd class="' + (row.c || "") + '">' + row.v + "</dd></div>";
       }).join("") + "</dl></div>";
-    }).join("");
+    }).join("") + table;
 
     renderOppChart(sim);
 
