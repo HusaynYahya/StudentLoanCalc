@@ -657,5 +657,84 @@ test("nothing is owed once the loan is over, cleared or written off", function (
   eq(E.balanceOn(lo.loans[0], last(lo) + 1), 0, "written off, then nothing");
 });
 
+
+/* -- Defects found by review, pinned so they cannot return ---------------- */
+
+console.log("\nEdges that once gave wrong answers");
+
+test("a deduction that is exactly a whole pound is not floored to one less", function () {
+  // A twelfth of £27,000 less a twelfth of £25,000, times 9%, is exactly £15.
+  // In binary it lands at 14.999999999999986.
+  eq(E.monthlyDeduction(27000, 25000, 0.09), 15, "£27,000 on Plan 5");
+  eq(E.monthlyDeduction(29000, 21000, 0.06), 40, "£29,000 on a postgraduate loan");
+  eq(E.monthlyDeduction(35000, 25000, 0.09), 75, "£35,000 on Plan 5");
+});
+
+test("a deduction with real pence in it still rounds down", function () {
+  // Against exact integer arithmetic: floor((salary - threshold) * pct / 1200).
+  var plans = [[25000, 0.09, 9], [21000, 0.06, 6], [29385, 0.09, 9], [26900, 0.09, 9]];
+  var bad = 0;
+  plans.forEach(function (p) {
+    for (var s = p[0]; s <= 200000; s += 137) {
+      if (E.monthlyDeduction(s, p[0], p[1]) !== Math.floor(((s - p[0]) * p[2]) / 1200)) bad++;
+    }
+  });
+  eq(bad, 0, "no salary disagrees with exact integer maths");
+});
+
+test("a loan of nothing is neither cleared nor written off", function () {
+  var s = E.simulate({
+    loans: [{ plan: "plan5", openingBalance: 0, repaymentStartYear: 2030 }],
+    salaries: { 2030: 40000 }
+  });
+  eq(s.combined.everRepaidInFull, false, "nothing was repaid in full");
+  eq(s.combined.milestones.length, 0, "and nothing is narrated about it");
+});
+
+test("a cost of nothing is the cheapest option, not a missing one", function () {
+  var s = E.simulate({
+    loans: [{ plan: "plan5", openingBalance: 30000, repaymentStartYear: 2030 }],
+    salaries: { 2030: 25000 }, assumptions: { salaryGrowth: 0 }
+  });
+  near(s.opportunity.fvRepayments, 0, 1e-9, "never deducted anything");
+  eq(s.opportunity.cheapest.key, "repay", "so repaying is what costs least");
+});
+
+test("a scenario with no loans says so rather than dereferencing null", function () {
+  var threw = null;
+  try { E.simulate({ loans: [], salaries: { 2030: 40000 } }); }
+  catch (err) { threw = err; }
+  ok(threw && !(threw instanceof TypeError), "an explanatory error, not a TypeError");
+});
+
+test("a month index that is not a number owes nothing, not the final balance", function () {
+  var r = E.simulate({
+    loans: [{ plan: "plan5", openingBalance: 40000, repaymentStartYear: 2030 }],
+    salaries: { 2030: 30000 }, assumptions: { salaryGrowth: 0 }
+  }).loans[0];
+  eq(E.balanceOn(r, NaN), 0, "NaN");
+  eq(E.balanceOn(r, undefined), 0, "undefined");
+  eq(E.balanceOn(r, "x"), 0, "a string");
+});
+
+test("yearly costs may be a number or one figure per year, and nothing else", function () {
+  var whole = E.drawdownSchedule({ years: 3, startYear: 2026, tuitionPerYear: 9535, maintenancePerYear: 10544 });
+  var sum = function (rows) { return rows.reduce(function (t, x) { return t + x.amount; }, 0); };
+  near(sum(whole), 60237, 0.5, "one figure for every year");
+  near(sum(E.drawdownSchedule({ years: 3, startYear: 2026, tuitionPerYear: "9535", maintenancePerYear: "10544" })),
+       60237, 0.5, "numeric strings coerce rather than indexing into characters");
+  var threw = false;
+  try { E.drawdownSchedule({ years: 3, startYear: 2026, tuitionPerYear: [9000, 9000], maintenancePerYear: 0 }); }
+  catch (e) { threw = true; }
+  ok(threw, "an array short of the course length is refused, not quietly zeroed");
+});
+
+test("a year missing from the middle of the RPI table takes the last published figure", function () {
+  var a = Object.assign({}, A, { rpiKnown: { 2025: 0.032, 2028: 0.05 }, rpi: 0.041 });
+  near(E.rpiFor(a, 2026), 0.032, 1e-9, "2026 falls back to March 2025, not the forecast");
+  near(E.rpiFor(a, 2027), 0.032, 1e-9, "so does 2027");
+  near(E.rpiFor(a, 2028), 0.05, 1e-9, "2028 is published");
+});
+
 console.log("\n" + passed + " passed, " + failed + " failed\n");
 process.exit(failed ? 1 : 0);

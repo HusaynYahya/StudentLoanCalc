@@ -162,6 +162,10 @@
   function balanceOn(r, monthIndex) {
     var ms = r && r.months;
     if (!ms || !ms.length) return 0;
+    // Both range guards are comparisons, and every comparison against NaN is
+    // false, so a bad index used to fall through the loop and come back as
+    // the final balance — a confident, wrong answer.
+    if (typeof monthIndex !== "number" || !isFinite(monthIndex)) return 0;
     if (monthIndex < ms[0].month) return 0;
     if (monthIndex > ms[ms.length - 1].month) return 0;
     var out = 0;
@@ -204,6 +208,14 @@
       if (known[taxYear] != null) return known[taxYear];
       var years = Object.keys(known).map(Number).sort(function (x, y) { return x - y; });
       if (years.length && taxYear < years[0]) return known[years[0]];
+      // A year missing from the middle of the table is still a year inside
+      // the published range: the last figure published before it stands,
+      // rather than the forecast for years nobody has published yet.
+      if (years.length && taxYear < years[years.length - 1]) {
+        for (var i = years.length - 1; i >= 0; i--) {
+          if (years[i] < taxYear) return known[years[i]];
+        }
+      }
     }
     var r = a.rpi;
     if (a.rpiReformYear != null && taxYear >= a.rpiReformYear) r -= (a.rpiReformDrop || 0);
@@ -253,7 +265,13 @@
     var pay = annualSalary / 12;
     var thr = annualThreshold / 12;
     if (pay <= thr) return 0;
-    return Math.floor((pay - thr) * rate);
+    // £27,000 against a £25,000 threshold is exactly £15 a month, but a
+    // twelfth of each is not exact in binary and the product lands at
+    // 14.999999999999986 — which floors to £14. The deduction was a pound
+    // light on a great many perfectly ordinary salaries, always light, never
+    // heavy. Six decimal places is far below a penny and far above the error,
+    // so it recovers the exact cases without rounding a real £14.996 up.
+    return Math.floor(Math.round((pay - thr) * rate * 1e6) / 1e6);
   }
 
   /* ---------------------------------------------------------------------- *
@@ -266,6 +284,19 @@
    * graduation day.
    * -------------------------------------------------------------------- */
 
+  // A per-year figure may be one number for every year or an array, one per
+  // year. Anything else — a string, an array that runs out — used to index
+  // into a character or coerce to zero and draw a plausible wrong loan.
+  function perYear(v, i, years) {
+    if (Array.isArray(v)) {
+      if (v.length !== years) throw new Error("drawdownSchedule: expected " + years + " yearly figures, got " + v.length);
+      return Number(v[i]) || 0;
+    }
+    var n = Number(v);
+    if (v != null && v !== "" && !isFinite(n)) throw new Error("drawdownSchedule: yearly figure is not a number");
+    return n || 0;
+  }
+
   function drawdownSchedule(course) {
     var rows = [];
     var tuitionSplit = [0.25, 0.25, 0.5];
@@ -273,10 +304,10 @@
     for (var i = 0; i < course.years; i++) {
       var acadStart = course.startYear + i;
       var months = [ym(acadStart, 9), ym(acadStart + 1, 1), ym(acadStart + 1, 4)];
-      var tuition = course.tuitionPerYear[i] != null ? course.tuitionPerYear[i] : course.tuitionPerYear;
-      var maint = course.maintenancePerYear[i] != null ? course.maintenancePerYear[i] : course.maintenancePerYear;
+      var tuition = perYear(course.tuitionPerYear, i, course.years);
+      var maint = perYear(course.maintenancePerYear, i, course.years);
       for (var t = 0; t < 3; t++) {
-        var amount = (Number(tuition) || 0) * tuitionSplit[t] + (Number(maint) || 0) * maintSplit[t];
+        var amount = tuition * tuitionSplit[t] + maint * maintSplit[t];
         if (amount > 0) rows.push({ month: months[t], amount: amount, academicYear: i + 1 });
       }
     }
@@ -410,7 +441,10 @@
         balance: balance
       });
 
-      if (inRepayment && balance <= 0.005 && cleared === null) {
+      // A loan of nothing is not a loan cleared. Without the borrowed test
+      // this fired on the first April of an empty balance and reported the
+      // loan repaid in full, alongside a milestone saying it never would be.
+      if (inRepayment && balance <= 0.005 && cleared === null && borrowed > 0) {
         balance = 0;
         cleared = i;
         break;
@@ -528,6 +562,10 @@
 
   function milestones(r) {
     var out = [];
+    // Nothing borrowed, nothing to narrate. Otherwise an empty loan collects
+    // a milestone saying the balance grows until it is written off, and
+    // another saying £0 was written off.
+    if (!(r.borrowed > 0)) return out;
     var borrowedAtStart = r.balanceAtRepayStart;
     var seenHalf = false, seenTurn = false, seenPeak = false;
     var peak = borrowedAtStart, peakYear = null;
@@ -761,11 +799,15 @@
       realFvUpfront: fvUpfront * deflate,
       // Cheapest of the three, priced at the same date.
       cheapest: (function () {
+        // A cost of zero is an answer, not a missing option: a borrower who
+        // is never deducted anything really does pay nothing, and dropping
+        // that row told them the cheapest life was to hand over the fees.
+        // Only options that do not apply are left out.
         var opts = [
-          { key: "repay", label: "borrow and repay", fv: fvRepayments },
-          { key: "upfront", label: "pay the fees in cash", fv: fvUpfront },
-          { key: "clear", label: "clear the balance today", fv: fvLump }
-        ].filter(function (o) { return o.fv > 0; });
+          { key: "repay", label: "borrow and repay", fv: fvRepayments, has: true },
+          { key: "upfront", label: "pay the fees in cash", fv: fvUpfront, has: upfrontPaid > 0 },
+          { key: "clear", label: "clear the balance today", fv: fvLump, has: lump > 0 }
+        ].filter(function (o) { return o.has; });
         opts.sort(function (a, b) { return a.fv - b.fv; });
         return opts.length ? opts[0] : null;
       })(),
@@ -796,6 +838,7 @@
     });
 
     var combined = combine(results, a);
+    if (!combined) throw new Error("simulate: no loans to simulate");
     return {
       loans: results,
       combined: combined,
