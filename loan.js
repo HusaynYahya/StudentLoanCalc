@@ -662,16 +662,33 @@
     var p = state.scen[state.active];
     var pts = pointsOf(p);
 
-    var grid = "", step = DRAW_MAX > 160000 ? 50000 : 25000;
-    for (var v = 0; v <= DRAW_MAX; v += step) {
+    // Two weights of line. The labelled ones carry the scale; the fainter
+    // ones between them let a point be read to something nearer than the
+    // nearest fifty thousand, without a wall of numbers down the side.
+    var grid = "";
+    var step = DRAW_MAX > 160000 ? 50000 : 25000;   // labelled
+    var fine = step / 5;                            // drawn, not labelled
+    for (var v = 0; v <= DRAW_MAX + 1; v += fine) {
+      var major = Math.abs(v % step) < 1;
       grid += '<line x1="' + DRAW.ml + '" y1="' + drawY(v).toFixed(1) + '" x2="' + (DRAW.W - DRAW.mr) +
-        '" y2="' + drawY(v).toFixed(1) + '" stroke="var(--line)" stroke-width="1"/>' +
-        '<text x="' + (DRAW.ml - 5) + '" y="' + (drawY(v) + 3.5).toFixed(1) +
-        '" text-anchor="end" font-size="8.5" fill="var(--ink-4)">' + gbpShort(v) + "</text>";
+        '" y2="' + drawY(v).toFixed(1) + '" stroke="var(--line' + (major ? "" : "-2") +
+        ')" stroke-width="' + (major ? 1 : 0.5) + '"/>';
+      if (major) {
+        grid += '<text x="' + (DRAW.ml - 5) + '" y="' + (drawY(v) + 3.5).toFixed(1) +
+          '" text-anchor="end" font-size="8.5" fill="var(--ink-4)">' + gbpShort(v) + "</text>";
+      }
     }
-    for (var t = 1; t <= DRAW_YEARS; t += 10) {
-      grid += '<text x="' + drawX(t).toFixed(1) + '" y="' + (DRAW.H - 6) +
-        '" text-anchor="middle" font-size="8.5" fill="var(--ink-4)">yr ' + t + "</text>";
+    // Years the same way: a tick every other year, a label every ten.
+    var y0 = DRAW.mt, y1 = DRAW.H - DRAW.mb;
+    for (var t = 1; t <= DRAW_YEARS; t += 2) {
+      var lab = (t - 1) % 10 === 0;
+      grid += '<line x1="' + drawX(t).toFixed(1) + '" y1="' + (lab ? y0 : y1 - 4) +
+        '" x2="' + drawX(t).toFixed(1) + '" y2="' + y1 +
+        '" stroke="var(--line' + (lab ? "" : "-2") + ')" stroke-width="' + (lab ? 1 : 0.5) + '"/>';
+      if (lab) {
+        grid += '<text x="' + drawX(t).toFixed(1) + '" y="' + (DRAW.H - 6) +
+          '" text-anchor="middle" font-size="8.5" fill="var(--ink-4)">yr ' + t + "</text>";
+      }
     }
 
     var line = "", lead = "", tail = "";
