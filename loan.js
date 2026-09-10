@@ -1076,7 +1076,7 @@
     var opts = [
       { k: "repay", label: "borrow and repay as required", fv: o.pvRepayments },
       { k: "upfront", label: "pay the fees in cash", fv: o.pvUpfront },
-      { k: "clear", label: "clear the balance today", fv: o.pvLump }
+      { k: "clear", label: "settle it in one payment", fv: o.pvLump }
     ].filter(function (c) { return c.fv > 0; }).sort(function (a, b) { return a.fv - b.fv; });
 
     var best = opts[0], worst = opts[opts.length - 1];
@@ -1085,7 +1085,7 @@
 
     var flip = o.breakEven != null
       ? " The two swap places at a savings return of <b>" + pct(o.breakEven) +
-        "</b>: below that, clearing it early wins; above it, keeping the money does."
+        "</b>: below that, settling it outright wins; above it, keeping the money does."
       : "";
 
     // Under a twentieth apart is not a difference anyone should act on.
@@ -1099,7 +1099,7 @@
 
     return { tone: best.k === "repay" ? "good" : "warn",
       verdict: best.k === "repay" ? "Take the loan and repay as required."
-             : best.k === "clear" ? "Clear the balance as soon as you can."
+             : best.k === "clear" ? "Settle the balance in one payment if you can."
              : "Pay the fees in cash if you can.",
       body: "In " + E.taxYearLabel(o.baseYear) + " money that comes to <b>" + gbp(best.fv) +
             "</b> against <b>" + gbp(worst.fv) + "</b> for the dearest \u2014 <b>" + gbp(spread) +
@@ -1244,11 +1244,11 @@
         why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
       { key: "upfront", k: "Pay the fees in cash",    cash: o.upfrontPaid, fv: o.pvUpfront,
         why: "all of it while you study" },
-      { key: "clear",   k: "Clear the balance today", cash: o.lump,        fv: o.pvLump,
-        why: "one payment, at the start" }
+      { key: "clear",   k: "Settle it in one payment", cash: o.lump,        fv: o.pvLump,
+        why: "the whole balance, the April repayments begin" }
     ].filter(function (c) { return c.cash > 0; })
      // With an opening balance there are no fees to find, so "pay your own
-     // way" and "clear it today" are the same act — list it once.
+     // way" and "settle it outright" are the same act — list it once.
      .filter(function (c, i, all) {
        return !all.some(function (other, k) {
          return k < i && Math.abs(other.cash - c.cash) < 1 && Math.abs(other.fv - c.fv) < 1;
@@ -1307,7 +1307,7 @@
             r.yearsRepaying + " years, so the two are not the same money. ";
           var priced = "Carried to " + endLabel + " at " + pct(o.savingsRate) + ", they come to <b>" +
             gbp(o.fvRepayments) + "</b> and <b>" + gbp(o.fvUpfront) + "</b>";
-          var clear = o.lump > 0 ? ", against <b>" + gbp(o.fvLump) + "</b> to clear the balance today" : "";
+          var clear = o.lump > 0 ? ", against <b>" + gbp(o.fvLump) + "</b> to settle it outright" : "";
           var wins = o.cheapest
             ? " — so the cheapest of them is to <b>" + o.cheapest.label + "</b>."
             : ".";
@@ -1346,7 +1346,7 @@
 
     $("oppKey").innerHTML =
       '<i style="color:var(--good)">Your repayments, saved instead</i>' +
-      '<i class="k-int">The balance you did not clear, growing at ' + pct(o.savingsRate) + "</i>" +
+      '<i class="k-int">The balance you did not settle, saved instead at ' + pct(o.savingsRate) + "</i>" +
       '<i style="color:var(--ink-4)">whichever is lower is the cheaper choice</i>';
   }
 
