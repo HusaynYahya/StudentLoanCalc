@@ -175,23 +175,14 @@
     return t.pg ? t.pgEnds : t.ugEnds;
   }
 
-  /* ---- breaks in employment ---------------------------------------------- */
-
-  function breaksOf(p) { return Array.isArray(p.breaks) ? p.breaks : []; }
-
-  function inBreak(p, taxYear) {
-    return breaksOf(p).some(function (b) {
-      return taxYear >= Number(b.from) && taxYear <= Number(b.to);
-    });
-  }
-
   /* ---------------------------------------------------------------------- *
    * THE TIMELINE, AS BLOCKS YOU CAN GRAB
    *
    * Five sliders and two rows of chips described a sequence of years without
-   * showing it. These are the years: undergraduate, postgraduate, breaks and
-   * the career, laid on a track and dragged into place. The career block has
-   * no right edge, because nobody knows where it ends.
+   * showing it. These are the years: undergraduate, postgraduate and the
+   * career, laid on a track and dragged into place. A gap between blocks is
+   * a year out — it needs no block of its own to say so. The career block
+   * has no right edge, because nobody knows where it ends.
    * -------------------------------------------------------------------- */
 
   var TL_MIN = 1, TL_PAD = 3;
@@ -204,9 +195,7 @@
     var t = timeline();
     var p = state.scen[state.active];
     var last = Math.max(t.ugEnds, t.workStart + 8, t.pg ? t.pgEnds : 0);
-    breaksOf(p).forEach(function (b) { last = Math.max(last, Number(b.to) + 2); });
     var from = t.ugStart - 1;
-    breaksOf(p).forEach(function (b) { from = Math.min(from, Number(b.from) - 1); });
     return { from: from, to: Math.max(from + 12, last + TL_PAD) };
   }
 
@@ -223,10 +212,6 @@
     }
     out.push({ id: "work", lane: "A", kind: "work", from: t.workStart, to: null,
                label: "Career", short: "WORK", resizable: false, movable: true });
-    breaksOf(p).forEach(function (b, i) {
-      out.push({ id: "brk" + i, lane: "B", kind: "brk", from: Number(b.from), to: Number(b.to) + 1,
-                 label: "Break", short: "OUT", resizable: true, movable: true, removable: true, index: i });
-    });
     return out;
   }
 
@@ -242,13 +227,15 @@
     for (var y = r.from; y <= r.to; y++) {
       if ((y - r.from) % every) continue;
       var at = pc(y);
-      // a tick centred on the very edge is half cut off, so pin those flush
-      var pin = at < 3 ? " is-first" : at > 97 ? " is-last" : "";
+      if (at > 93) continue;          // it would crowd the one pinned to the end
+      // a tick centred on the very edge is half cut off, so pin that one flush
+      var pin = at < 3 ? " is-first" : "";
       scale += '<span class="tl__tick' + pin + '" style="left:' + at.toFixed(2) + '%">' + y + "</span>";
     }
+    scale += '<span class="tl__tick is-last">' + r.to + "</span>";
     $("tlScale").innerHTML = scale;
 
-    var lanes = { A: "", B: "" };
+    var lanes = { A: "" };
     tlBlocks().forEach(function (b) {
       var left = pc(b.from);
       var width = Math.max(b.to == null ? (100 - left) : (pc(b.to) - left), 1.2);
@@ -268,15 +255,14 @@
         "</div>";
     });
     $("tlLaneA").innerHTML = lanes.A;
-    $("tlLaneB").innerHTML = lanes.B || '<p class="tl__empty">no breaks</p>';
 
     var t = timeline();
-    var brk = breaksOf(state.scen[state.active]);
+    var gap = t.workStart - defaultWorkStart(t);
     $("tlNote").innerHTML =
       "Studying " + t.ugStart + "\u2013" + t.ugEnds +
       (t.pg ? ", then " + t.pgStart + "\u2013" + t.pgEnds : "") +
       ". Working from <b>" + t.workStart + "</b>" +
-      (brk.length ? ", " + brk.length + (brk.length === 1 ? " break" : " breaks") : "") + ".";
+      (gap > 0 ? ", after " + gap + (gap === 1 ? " year" : " years") + " out" : "") + ".";
     $("tlAddPg").textContent = t.pg ? "− Postgrad" : "+ Postgrad";
   }
 
@@ -317,18 +303,6 @@
     } else if (g.id === "work") {
       state.workTouched = true;
       set("workStartYear", clamp(g.orig.from + d, t.ugStart, 2070));
-    } else if (g.id.indexOf("brk") === 0) {
-      var b = p.breaks[g.index];
-      if (!b) return;
-      if (g.edge === "l") {
-        b.from = clamp(g.orig.from + d, t.ugStart, Number(b.to));
-      } else if (g.edge === "r") {
-        b.to = clamp(g.orig.to + d - 1, Number(b.from), 2090);
-      } else {
-        var len = g.orig.to - g.orig.from;
-        b.from = clamp(g.orig.from + d, t.ugStart, 2090);
-        b.to = b.from + len - 1;
-      }
     }
 
     if (g.id !== "work" && !state.workTouched) set("workStartYear", defaultWorkStart(timeline()));
@@ -344,9 +318,6 @@
       if (!drop) return;
       var id = drop.dataset.drop;
       if (id === "pg") { $("hasPgl").checked = false; $("pglRow").hidden = true; }
-      else if (id.indexOf("brk") === 0) {
-        state.scen[state.active].breaks.splice(Number(id.slice(3)), 1);
-      }
       renderTimelineTrack(); run(); save();
     });
 
@@ -389,15 +360,6 @@
     };
     host.addEventListener("pointerup", stop);
     host.addEventListener("pointercancel", stop);
-
-    $("tlAddBreak").addEventListener("click", function () {
-      var p = state.scen[state.active];
-      if (!Array.isArray(p.breaks)) p.breaks = [];
-      var t = timeline();
-      var from = p.breaks.length ? Number(p.breaks[p.breaks.length - 1].to) + 2 : t.workStart + 4;
-      p.breaks.push({ from: from, to: from });
-      renderTimelineTrack(); run();
-    });
 
     $("tlAddPg").addEventListener("click", function () {
       var on = !$("hasPgl").checked;
@@ -474,7 +436,7 @@
     var withGaps = {};
     Object.keys(out).forEach(function (k) {
       var y = Number(k);
-      withGaps[y] = (y < work || inBreak(p, y)) ? 0 : out[y];
+      withGaps[y] = y < work ? 0 : out[y];
     });
 
     // Repayments can fall due before work starts; those years need to exist in
@@ -599,13 +561,12 @@
   var DRAW_YEARS = 40;
   var DRAW_MAX = 150000;          // top of the axis; typing elsewhere goes higher
 
-  function defaultPoints() {
-    return [{ t: 1, v: 28000 }, { t: 6, v: 36000 }, { t: 11, v: 44000 },
-            { t: 21, v: 54000 }, { t: 31, v: 56000 }];
-  }
+  // Nothing. The chart opens blank and the curve is yours from the first
+  // click, rather than five borrowed points to be dragged out of the way.
+  function defaultPoints() { return []; }
 
   function pointsOf(p) {
-    if (!Array.isArray(p.points) || !p.points.length) {
+    if (!Array.isArray(p.points)) {
       // Carry over a profile saved when this was eight five-year bands.
       p.points = Array.isArray(p.bands) && p.bands.length
         ? p.bands.map(function (v, i) { return { t: i * 5 + 1, v: Number(v) || 0 }; })
@@ -646,7 +607,7 @@
     var p = state.scen[state.active];
     var pts = pointsOf(p);
 
-    var grid = "", step = 50000;
+    var grid = "", step = 25000;
     for (var v = 0; v <= DRAW_MAX; v += step) {
       grid += '<line x1="' + DRAW.ml + '" y1="' + drawY(v).toFixed(1) + '" x2="' + (DRAW.W - DRAW.mr) +
         '" y2="' + drawY(v).toFixed(1) + '" stroke="var(--line)" stroke-width="1"/>' +
@@ -658,18 +619,21 @@
         '" text-anchor="middle" font-size="8.5" fill="var(--ink-4)">yr ' + t + "</text>";
     }
 
-    var line = pts.map(function (q, i) {
-      return (i ? "L" : "M") + drawX(q.t).toFixed(1) + " " + drawY(q.v).toFixed(1);
-    }).join(" ");
-    // Flat runs either side, so the curve reads as what it actually models.
-    var lead = "M" + drawX(1).toFixed(1) + " " + drawY(pts[0].v).toFixed(1) +
-               "L" + drawX(pts[0].t).toFixed(1) + " " + drawY(pts[0].v).toFixed(1);
-    var tail = "M" + drawX(pts[pts.length - 1].t).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1) +
-               "L" + drawX(DRAW_YEARS).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1);
+    var line = "", lead = "", tail = "";
+    if (pts.length) {
+      line = pts.map(function (q, i) {
+        return (i ? "L" : "M") + drawX(q.t).toFixed(1) + " " + drawY(q.v).toFixed(1);
+      }).join(" ");
+      // Flat runs either side, so the curve reads as what it actually models.
+      lead = "M" + drawX(1).toFixed(1) + " " + drawY(pts[0].v).toFixed(1) +
+             "L" + drawX(pts[0].t).toFixed(1) + " " + drawY(pts[0].v).toFixed(1);
+      tail = "M" + drawX(pts[pts.length - 1].t).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1) +
+             "L" + drawX(DRAW_YEARS).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1);
+    }
 
     var dots = pts.map(function (q, i) {
       return '<circle class="dp" data-pt="' + i + '" cx="' + drawX(q.t).toFixed(1) + '" cy="' +
-        drawY(q.v).toFixed(1) + '" r="5" fill="var(--live)" stroke="var(--bg-2)" stroke-width="1.5"/>';
+        drawY(q.v).toFixed(1) + '" r="5" fill="var(--warn)" stroke="var(--bg-2)" stroke-width="1.5"/>';
     }).join("");
 
     host.innerHTML =
@@ -683,9 +647,13 @@
       '<path d="' + tail + '" fill="none" stroke="var(--live)" stroke-width="1.5" stroke-dasharray="3 3" opacity=".6"/>' +
       dots + "</svg>";
 
-    $("drawNote").innerHTML = pts.length +
-      (pts.length === 1 ? " point" : " points") +
-      " \u2014 click to add one, drag to move it, click it twice to take it away.";
+    var held = dpDrag && dpDrag.pt;
+    $("drawNote").innerHTML = held
+      ? "Year <b>" + held.t + "</b> of your career \u2014 <b>" + gbp(held.v) + "</b> a year, in today\u2019s money."
+      : pts.length
+        ? pts.length + (pts.length === 1 ? " point" : " points") +
+          " \u2014 click to add one, drag to move it, click it twice to take it away."
+        : "Empty. Click anywhere on the chart to place your first point.";
   }
 
   // Where a pointer is, in career-year and salary.
@@ -695,7 +663,7 @@
     var sy = (ev.clientY - rect.top) / rect.height * DRAW.H;
     var t = Math.round(1 + (sx - DRAW.ml) / (DRAW.W - DRAW.ml - DRAW.mr) * (DRAW_YEARS - 1));
     var v = (1 - (sy - DRAW.mt) / (DRAW.H - DRAW.mt - DRAW.mb)) * DRAW_MAX;
-    return { t: clamp(t, 1, DRAW_YEARS), v: Math.max(0, Math.round(v / 500) * 500) };
+    return { t: clamp(t, 1, DRAW_YEARS), v: Math.max(0, Math.round(v / 250) * 250) };
   }
 
   var dpDrag = null, dpLast = null;
@@ -717,7 +685,7 @@
       if (dot) {
         var pt = pts[Number(dot.dataset.pt)];
         var now = Date.now();
-        if (dpLast && dpLast.pt === pt && now - dpLast.at < 400 && pts.length > 1) {
+        if (dpLast && dpLast.pt === pt && now - dpLast.at < 400) {
           p.points = pts.filter(function (q) { return q !== pt; });
           dpLast = null;
           dpDrag = null;
@@ -764,6 +732,8 @@
       if (!dpDrag) return;
       dpDrag = null;
       try { host.releasePointerCapture(ev.pointerId); } catch (e) { /* gone already */ }
+      buildIncomeChart();          // the live figure gives way to the count
+      save();
     };
     host.addEventListener("pointerup", stop);
     host.addEventListener("pointercancel", stop);
@@ -804,7 +774,6 @@
       points: null,                    // drawn on demand; see defaultPoints()
       manual: {},
       manualYears: 12,
-      breaks: [],
       plan: "plan5",
       overpay: 0
     };
@@ -1001,6 +970,7 @@
     if (s.mode === "growth") return gbpShort(s.startSalary) + " +" + s.growth + "%";
     if (s.mode === "bands") {
       var dp = pointsOf(s);
+      if (!dp.length) return "nothing drawn yet";
       return gbpShort(dp[0].v) + " \u2192 " + gbpShort(dp[dp.length - 1].v);
     }
     if (s.mode === "manual") return "typed by year";
@@ -2180,12 +2150,6 @@
       var bits = ["Undergraduate " + t.ugStart + "\u2013" + t.ugEnds];
       if (t.pg) bits.push("postgraduate " + t.pgStart + "\u2013" + t.pgEnds);
       bits.push("work from " + t.workStart);
-      var brk = breaksOf(profile());
-      if (brk.length) {
-        bits.push(brk.map(function (b) {
-          return Number(b.from) === Number(b.to) ? "a break in " + b.from : "a break " + b.from + "\u2013" + b.to;
-        }).join(", "));
-      }
       $("startHint").textContent = bits.join(" \u00b7 ") + ".";
 
       var gap = t.workStart - defaultWorkStart(t);
@@ -2499,17 +2463,6 @@
         var v = parseFloat(t.value);
         if (!p.manual) p.manual = {};
         p.manual[t.dataset.year] = isFinite(v) ? Math.max(0, v) : 0;
-        run();
-        return;
-      }
-      if (t.dataset && t.dataset.brk != null) {
-        var bi = Number(t.dataset.brk), bv = parseInt(t.value, 10);
-        if (isFinite(bv)) {
-          p.breaks[bi][t.dataset.end] = bv;
-          // A break that ends before it starts is a typo, not an instruction.
-          if (t.dataset.end === "from" && p.breaks[bi].to < bv) p.breaks[bi].to = bv;
-          if (t.dataset.end === "to" && bv < p.breaks[bi].from) p.breaks[bi].from = bv;
-        }
         run();
         return;
       }

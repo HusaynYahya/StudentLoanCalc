@@ -720,7 +720,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
 .draw { margin-top: .5rem; }
 .draw svg { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; }
-.draw .dp { cursor: grab; }
+.draw .dp { cursor: grab; filter: drop-shadow(0 0 5px color-mix(in srgb, var(--warn) 70%, transparent)); }
 .draw .dp:hover { r: 6.5; }
 .draw .dp:active { cursor: grabbing; }
 
@@ -749,8 +749,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 }
 .tl__tick.is-first { left: 0 !important; transform: none; }
 .tl__tick.is-last  { left: auto !important; right: 0; transform: none; }
-.tl__lane { position: relative; height: 2rem; margin: 0 0 .3rem; }
-.tl__lane:last-child { height: 1.6rem; margin-bottom: 0; }
+.tl__lane { position: relative; height: 2.3rem; }
 
 .tl__blk {
   position: absolute; top: 0; bottom: 0;
@@ -767,7 +766,10 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 }
 /* The career runs to the edge of the track, so it lies behind everything
    else — otherwise it covers the controls of whatever it starts next to. */
-.tl__blk.is-open { z-index: 1; }
+/* The career spans most of the track, so its name sits at the start of the
+   band rather than the middle, where a break would land on top of it. */
+.tl__blk.is-open { z-index: 1; justify-content: flex-start; }
+.tl__blk.is-open .tl__name { padding-left: .75rem; }
 .tl__blk:hover { z-index: 3; }
 .tl.is-grabbed .tl__blk { cursor: grabbing; }
 .tl__blk:hover { background: color-mix(in srgb, var(--k) 20%, transparent); }
@@ -780,7 +782,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .tl__blk.k-ug   { --k: var(--info); }
 .tl__blk.k-pg   { --k: #a78bfa; }
 .tl__blk.k-work { --k: var(--good); }
-.tl__blk.k-brk  { --k: var(--warn); }
 
 .tl__name {
   font-size: .68rem; font-weight: 600; letter-spacing: .04em;
@@ -812,10 +813,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .tl__blk:hover .tl__x { opacity: .8; }
 .tl__x:hover { opacity: 1; background: color-mix(in srgb, var(--k) 25%, transparent); }
 .tl__blk:hover .tl__grip::after { opacity: .9; }
-.tl__empty {
-  margin: 0; padding-left: .1rem; font-size: .7rem; color: var(--ink-4);
-  line-height: 1.6rem;
-}
 .tlkey {
   display: flex; flex-wrap: wrap; gap: .1rem .8rem;
   margin: .1rem 0 .45rem; padding: 0; list-style: none;
@@ -833,4 +830,3 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .tlkey .k-ug   { --k: var(--info); }
 .tlkey .k-pg   { --k: #a78bfa; }
 .tlkey .k-work { --k: var(--good); }
-.tlkey .k-brk  { --k: var(--warn); }
