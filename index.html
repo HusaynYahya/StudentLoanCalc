@@ -20,8 +20,11 @@
   <aside class="panel" aria-label="Controls">
 
     <header class="panel__head">
-      <p class="brand">UK&nbsp;student&nbsp;finance</p>
-      <h1>Repayment model</h1>
+      <div>
+        <p class="brand">UK&nbsp;student&nbsp;finance</p>
+        <h1>Repayment model</h1>
+      </div>
+      <button type="button" id="panelToggle" class="panel__toggle" aria-expanded="true">← Hide controls</button>
     </header>
 
     <form id="form" novalidate>
@@ -34,40 +37,48 @@
         <p class="note">Everything below edits the scenario you have selected. All of them stay on the charts.</p>
       </section>
 
-      <!-- ---- path ---- -->
+      <!-- ---- income profile ---- -->
       <section class="grp">
         <div class="grp__head">
           <h2>Income <b class="who" id="whoIncome">A</b></h2>
-          <div class="seg" role="tablist" aria-label="How to set the salary">
-            <button type="button" role="tab" id="tab-predict" aria-controls="pane-predict" aria-selected="true" data-tab="predict">Career</button>
-            <button type="button" role="tab" id="tab-manual" aria-controls="pane-manual" aria-selected="false" data-tab="manual">By year</button>
+        </div>
+
+        <div class="seg seg--wrap" role="tablist" aria-label="How to state the income">
+          <button type="button" role="tab" id="tab-career" aria-controls="pane-career" aria-selected="true" data-mode="career">Profession</button>
+          <button type="button" role="tab" id="tab-growth" aria-controls="pane-growth" aria-selected="false" data-mode="growth">Start + growth</button>
+          <button type="button" role="tab" id="tab-bands"  aria-controls="pane-bands"  aria-selected="false" data-mode="bands">5-year bands</button>
+          <button type="button" role="tab" id="tab-manual" aria-controls="pane-manual" aria-selected="false" data-mode="manual">Year by year</button>
+        </div>
+
+        <div class="pane" id="pane-career" role="tabpanel" aria-labelledby="tab-career">
+          <div class="picks" id="careerCards" role="radiogroup" aria-label="Profession"></div>
+          <select id="career" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+          <p class="note" id="careerNote"></p>
+        </div>
+
+        <div class="pane" id="pane-growth" role="tabpanel" aria-labelledby="tab-growth" hidden>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="startSalary">Starting salary</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="startSalary" min="0" max="500000" step="500" value="30000" data-slider="15000,150000,500" /></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="salaryGrowth">Grows a year</label>
+              <span class="ctl__val"><input type="number" id="salaryGrowth" min="-5" max="20" step="0.1" value="4" data-slider="0,12,0.1" /><i>%</i></span>
+            </div>
+            <p class="note">Cash, not real — above inflation is a rise, at inflation you stand still.</p>
           </div>
         </div>
 
-        <div class="pane" id="pane-predict" role="tabpanel" aria-labelledby="tab-predict">
-          <div class="picks" id="careerCards" role="radiogroup" aria-label="Career path"></div>
-          <select id="career" class="sr-only" tabindex="-1" aria-hidden="true"></select>
-          <p class="note" id="careerNote"></p>
-
-          <div id="customSalary">
-            <div class="ctl">
-              <div class="ctl__top">
-                <label for="startSalary">Starting salary</label>
-                <span class="ctl__val"><i>£</i><input type="number" id="startSalary" min="0" max="500000" step="500" value="30000" data-slider="15000,150000,500" /></span>
-              </div>
-            </div>
-            <div class="ctl">
-              <div class="ctl__top">
-                <label for="salaryGrowth">Pay rise a year</label>
-                <span class="ctl__val"><input type="number" id="salaryGrowth" min="-5" max="20" step="0.1" value="4" data-slider="0,12,0.1" /><i>%</i></span>
-              </div>
-            </div>
-          </div>
-          <p class="readout" id="predictSummary"></p>
+        <div class="pane" id="pane-bands" role="tabpanel" aria-labelledby="tab-bands" hidden>
+          <p class="note">What you expect to be earning in each five-year stretch, in today's money. Inflation is added on top.</p>
+          <div class="bands" id="bandRows"></div>
         </div>
 
         <div class="pane" id="pane-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
-          <p class="note">Pre-filled from the career you picked. £0 for a career break. Past the last row it carries on with inflation.</p>
+          <p class="note">Every year, yours to set. £0 for a career break.</p>
           <table class="years">
             <thead><tr><th scope="col">Year</th><th scope="col">Age</th><th scope="col">Salary</th></tr></thead>
             <tbody id="salaryRows"></tbody>
@@ -77,6 +88,8 @@
             <button type="button" class="btn" id="resetSalaries">Reset</button>
           </div>
         </div>
+
+        <p class="readout" id="predictSummary"></p>
       </section>
 
       <!-- ---- loan ---- -->
@@ -201,6 +214,13 @@
           </div>
           <div class="ctl">
             <div class="ctl__top">
+              <label for="savings">Savings return</label>
+              <span class="ctl__val"><input type="number" id="savings" min="0" max="20" step="0.1" value="4.5" data-slider="0,12,0.1" /><i>%</i></span>
+            </div>
+            <p class="note">What the money would earn if you kept it instead of handing it over.</p>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
               <label for="bankBase">Base rate</label>
               <span class="ctl__val"><input type="number" id="bankBase" min="0" max="20" step="0.1" value="3.75" data-slider="0,10,0.25" /><i>%</i></span>
             </div>
@@ -227,6 +247,7 @@
     </header>
 
     <div class="bar">
+      <dl class="facts" id="facts"></dl>
       <div class="seg seg--sm" role="group" aria-label="Money basis">
         <button type="button" class="on" data-basis="cash">Cash</button>
         <button type="button" data-basis="real">Today's money</button>
@@ -236,17 +257,31 @@
     <section class="cards">
 
       <figure class="card card--wide">
-        <figcaption><h3>Balance, repayments and interest</h3>
-          <p>What you owe usually climbs for years before it falls.</p></figcaption>
+        <figcaption><h3>The income profiles</h3>
+          <p>Every profile over time, each in its own colour, against the repayment threshold. You pay 9% of the gap above it.</p></figcaption>
+        <div id="salaryChart" class="viz"></div>
+        <p class="key" id="salaryKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>What you still owe</h3>
+          <p>The debt tracker. Each line ends where that loan does — cleared, or written off.</p></figcaption>
         <div id="chart" class="viz"></div>
         <p class="key" id="chartKey"></p>
       </figure>
 
-      <figure class="card">
-        <figcaption><h3>Salary against the threshold</h3>
-          <p>You pay 9% of the shaded gap. Nothing on the rest.</p></figcaption>
-        <div id="salaryChart" class="viz"></div>
-        <p class="key" id="salaryKey"></p>
+      <figure class="card card--wide">
+        <figcaption><h3>What you have handed over</h3>
+          <p>Running total until the repayments stop. The flat line along the bottom is the life where you never borrowed.</p></figcaption>
+        <div id="costChart" class="viz"></div>
+        <p class="key" id="costKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>Side by side</h3>
+          <p>Lifetime cost of each profile, against never having borrowed.</p></figcaption>
+        <div id="barsChart" class="viz"></div>
+        <p class="key" id="barsKey"></p>
       </figure>
 
       <figure class="card">
@@ -263,25 +298,20 @@
         <p class="key" id="rateKey"></p>
       </figure>
 
-      <figure class="card">
+      <figure class="card card--wide focus" id="focusCard">
+        <figcaption><h3>Profile <b class="who" id="whoFocus">A</b> — the whole picture</h3>
+          <p>Every number for the selected profile, and what the same money would have done in a savings account.</p></figcaption>
+        <div class="focus__grid" id="focusGrid"></div>
+        <div id="oppChart" class="viz"></div>
+        <p class="key" id="oppKey"></p>
+        <p class="note" id="oppVerdict"></p>
+      </figure>
+
+      <figure class="card card--wide">
         <figcaption><h3>Where it ends up</h3>
-          <p>For the selected scenario. Both bars are the same length — the money has to go somewhere.</p></figcaption>
+          <p>For the selected profile. Both bars are the same length — the money has to go somewhere.</p></figcaption>
         <div id="flowChart" class="viz"></div>
         <p class="key" id="flowKey"></p>
-      </figure>
-
-      <figure class="card card--wide">
-        <figcaption><h3>The running cost of having a loan</h3>
-          <p>Everything handed over, accumulating. The flat line along the bottom is the life where you never borrowed.</p></figcaption>
-        <div id="costChart" class="viz"></div>
-        <p class="key" id="costKey"></p>
-      </figure>
-
-      <figure class="card card--wide">
-        <figcaption><h3>Side by side</h3>
-          <p>What each scenario costs over a lifetime, against never having borrowed.</p></figcaption>
-        <div id="barsChart" class="viz"></div>
-        <p class="key" id="barsKey"></p>
       </figure>
 
       <figure class="card card--wide">

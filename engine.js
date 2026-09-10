@@ -93,7 +93,8 @@
     interestCapUntil: 2027,   // the last tax year that cap has been announced for
     thresholdGrowth: 0.03,    // how fast thresholds rise once unfrozen
     salaryGrowth: 0.03,       // used only to extend a salary line past its last entry
-    inflation: 0.041          // used to restate the ledger in today's money
+    inflation: 0.041,         // used to restate the ledger in today's money
+    savings: 0.045            // what the money would earn if you kept it instead
   };
 
   /* ---------------------------------------------------------------------- *
@@ -543,6 +544,76 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * THE OTHER THING YOU COULD DO WITH THE MONEY
+   *
+   * Two choices, priced at the same date so they can be compared honestly:
+   *
+   *   Repay as required  — hand over the stream of deductions.
+   *   Clear it today     — hand over the whole balance now, then pay nothing.
+   *
+   * The second looks cheaper because the number is smaller, but money paid
+   * today is worth more than money paid in 2060. So both are carried forward
+   * to the year the loan ends at the savings rate: whichever is the smaller
+   * pile at that date is the one that actually cost less.
+   *
+   * Payments are treated as falling mid-year, which is what a stream of twelve
+   * monthly deductions averages out to.
+   * -------------------------------------------------------------------- */
+
+  function opportunity(r, opts) {
+    var s = opts && opts.savings != null ? opts.savings : 0.045;
+    var infl = opts && opts.inflation != null ? opts.inflation : DEFAULT_ASSUMPTIONS.inflation;
+
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!repaying.length) {
+      return { lump: r.balanceAtRepayStart || 0, years: 0, savingsRate: s,
+               fvRepayments: 0, fvLump: r.balanceAtRepayStart || 0,
+               clearingSaves: -(r.balanceAtRepayStart || 0), clearingIsBetter: false,
+               realFvRepayments: 0, realFvLump: r.balanceAtRepayStart || 0,
+               realClearingSaves: -(r.balanceAtRepayStart || 0), track: [] };
+    }
+
+    var startYear = repaying[0].taxYear;
+    var endYear = repaying[repaying.length - 1].taxYear + 1;   // the loan is done by here
+    var span = endYear - startYear;
+    var lump = r.balanceAtRepayStart || 0;
+
+    var fvRepayments = 0, track = [], running = 0;
+    repaying.forEach(function (y) {
+      var paid = y.repaid + y.voluntary;
+      var carried = Math.max(0, endYear - y.taxYear - 0.5);
+      fvRepayments += paid * Math.pow(1 + s, carried);
+
+      // What the two choices are worth as the years pass, for the chart.
+      running = running * (1 + s) + paid * Math.pow(1 + s, 0.5);
+      track.push({
+        taxYear: y.taxYear,
+        label: y.label,
+        repaymentsSaved: running,                                  // the stream, compounding
+        lumpGrown: lump * Math.pow(1 + s, y.taxYear - startYear + 1) // the balance, left to grow
+      });
+    });
+
+    var fvLump = lump * Math.pow(1 + s, span);
+    var deflate = Math.pow(1 + infl, -span);
+
+    return {
+      lump: lump,
+      years: span,
+      savingsRate: s,
+      fvRepayments: fvRepayments,
+      fvLump: fvLump,
+      // Positive means clearing the balance today was the cheaper of the two.
+      clearingSaves: fvRepayments - fvLump,
+      clearingIsBetter: fvRepayments > fvLump,
+      realFvRepayments: fvRepayments * deflate,
+      realFvLump: fvLump * deflate,
+      realClearingSaves: (fvRepayments - fvLump) * deflate,
+      track: track
+    };
+  }
+
+  /* ---------------------------------------------------------------------- *
    * PUBLIC ENTRY POINT
    * -------------------------------------------------------------------- */
 
@@ -555,7 +626,16 @@
       return simulateLoan(loan, ctx);
     });
 
-    return { loans: results, combined: combine(results, a), assumptions: a };
+    var combined = combine(results, a);
+    return {
+      loans: results,
+      combined: combined,
+      opportunity: opportunity(combined, {
+        savings: a.savings,
+        inflation: a.inflation
+      }),
+      assumptions: a
+    };
   }
 
   // Two loans repaid at once (an undergraduate plan plus a postgraduate loan)
@@ -650,6 +730,7 @@
     BASE_TAX_YEAR: BASE_TAX_YEAR,
     simulate: simulate,
     simulateLoan: simulateLoan,
+    opportunity: opportunity,
     thresholdFor: thresholdFor,
     upperThresholdFor: upperThresholdFor,
     interestRate: interestRate,

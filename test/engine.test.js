@@ -351,6 +351,71 @@ test("the smaller postgraduate loan clears first", function () {
   ok(pg.yearsRepaying <= ug.yearsRepaying, "and it clears no later than the undergraduate one");
 });
 
+/* -- The other thing you could do with the money -------------------------- */
+
+console.log("\nPaying it off today, against saving instead");
+
+function withSalary(salary, extra) {
+  return E.simulate(Object.assign({
+    loans: [{ plan: "plan5", openingBalance: 60000, repaymentStartYear: 2030 }],
+    salaries: { 2030: salary }
+  }, extra || {}));
+}
+
+test("both choices are priced at the same date, not at today", function () {
+  var o = withSalary(60000).opportunity;
+  eq(Math.round(o.lump), 60000, "the lump is the balance when repayments begin");
+  ok(o.years > 0, "there is a span to carry forward over");
+  ok(o.fvLump > o.lump, "the lump grows if you keep it");
+  ok(o.fvRepayments > 0, "and the repayment stream is carried forward too");
+});
+
+test("a stream paid over decades costs less than the same sum paid today", function () {
+  var o = withSalary(60000).opportunity;
+  // Clearing hands over the whole balance now; repaying spreads it out. At any
+  // positive savings rate the spread-out stream should be the cheaper pile.
+  ok(!o.clearingIsBetter, "keeping the money should win at 4.5%");
+  ok(o.clearingSaves < 0, "clearingSaves is negative when clearing is the worse deal");
+});
+
+test("a high enough savings rate can only widen that gap", function () {
+  var low = withSalary(60000, { assumptions: { savings: 0.01 } }).opportunity;
+  var high = withSalary(60000, { assumptions: { savings: 0.08 } }).opportunity;
+  ok(high.fvLump > low.fvLump, "the kept lump grows faster");
+  ok(Math.abs(high.clearingSaves) > Math.abs(low.clearingSaves), "and the case for keeping it strengthens");
+});
+
+test("with no savings rate at all it is a straight cash comparison", function () {
+  var o = withSalary(60000, { assumptions: { savings: 0 } }).opportunity;
+  near(o.fvLump, o.lump, 0.01, "the lump does not grow");
+  near(o.fvRepayments, o.years ? o.fvRepayments : 0, 0.01, "nothing compounds");
+  var r = withSalary(60000, { assumptions: { savings: 0 } }).combined;
+  near(o.fvRepayments, r.totalRepaid, 1, "so the stream is just the cash total");
+});
+
+test("the track has a row per repaying year, both choices side by side", function () {
+  var s = withSalary(60000);
+  var repaying = s.combined.years.filter(function (y) { return y.phase === "repaying"; });
+  eq(s.opportunity.track.length, repaying.length, "one row per repaying year");
+  var last = s.opportunity.track[s.opportunity.track.length - 1];
+  ok(last.lumpGrown > 0 && last.repaymentsSaved > 0, "both series are populated");
+  for (var i = 1; i < s.opportunity.track.length; i++) {
+    ok(s.opportunity.track[i].lumpGrown >= s.opportunity.track[i - 1].lumpGrown, "the kept lump only grows");
+  }
+});
+
+test("today's money is smaller than the cash figure, for both choices", function () {
+  var o = withSalary(60000).opportunity;
+  ok(o.realFvRepayments < o.fvRepayments, "repayments deflate");
+  ok(o.realFvLump < o.fvLump, "and so does the lump");
+});
+
+test("someone who never repays has nothing to weigh up", function () {
+  var o = withSalary(18000, { assumptions: { salaryGrowth: 0 } }).opportunity;
+  eq(Math.round(o.fvRepayments), 0, "no repayments to carry forward");
+  ok(!o.clearingIsBetter, "and clearing a balance that would be written off is never better");
+});
+
 /* -- Sanity -------------------------------------------------------------- */
 
 console.log("\nSanity");

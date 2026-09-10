@@ -27,9 +27,13 @@
   --sA:      #35d6a4;   /* scenario A */
   --sB:      #5b9dff;   /* scenario B */
   --sC:      #c084fc;   /* scenario C */
+  --sD:      #fbbf5c;   /* scenario D */
+  --sE:      #fb7185;   /* scenario E */
   --sA-g:    rgba(53, 214, 164, .18);
   --sB-g:    rgba(91, 157, 255, .18);
   --sC-g:    rgba(192, 132, 252, .18);
+  --sD-g:    rgba(251, 191, 92, .18);
+  --sE-g:    rgba(251, 113, 133, .18);
 
   /* The panel tints to whichever scenario the controls are editing. */
   --live:    var(--sA);
@@ -486,3 +490,75 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   flex: 1 1 100%; padding-top: .7rem; border-top: 1px solid var(--line);
 }
 .hero__gap b { color: var(--ink); font-family: var(--num); font-weight: 600; }
+
+/* ---- income modes and 5-year bands ------------------------------------- */
+
+.seg--wrap { display: flex; flex-wrap: wrap; width: 100%; margin-bottom: .85rem; }
+.seg--wrap button { flex: 1 1 auto; text-align: center; }
+
+.bands { display: grid; gap: .55rem; }
+.band { display: grid; grid-template-columns: 1fr auto; gap: .1rem .5rem; align-items: baseline; }
+.band label { font-size: .77rem; color: var(--ink-2); }
+.band .ctl__val { justify-self: end; }
+.band .ctl__val input { width: 5.6ch; }
+.band input[type="range"] { grid-column: 1 / -1; margin-top: .15rem; }
+
+/* ---- the facts bar ------------------------------------------------------ */
+
+.bar { align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.facts { display: flex; flex-wrap: wrap; gap: .3rem 1.4rem; margin: 0; }
+.facts div { min-width: 0; }
+.facts dt {
+  font-size: .6rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700;
+}
+.facts dd {
+  margin: 0; font-family: var(--num); font-size: .84rem;
+  font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap;
+}
+
+/* ---- the focus panel ---------------------------------------------------- */
+
+.focus { border-color: var(--c, var(--line)); }
+.focus__grid {
+  display: grid; gap: 1rem 1.6rem; margin-bottom: 1.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.fgroup h4 {
+  margin: 0 0 .45rem; font-size: .64rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+  padding-bottom: .35rem; border-bottom: 1px solid var(--line);
+}
+.fgroup dl { margin: 0; }
+.fgroup dl div {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: .8rem; padding: .2rem 0;
+}
+.fgroup dt { font-size: .78rem; color: var(--ink-3); min-width: 0; }
+.fgroup dd {
+  margin: 0; font-family: var(--num); font-size: .84rem;
+  font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap;
+}
+.fgroup dd.good { color: var(--good); }
+.fgroup dd.warn { color: var(--warn); }
+.fgroup dd.bad  { color: var(--bad); }
+#oppVerdict { margin-top: .8rem; font-size: .8rem; line-height: 1.6; color: var(--ink-3); }
+#oppVerdict b { color: var(--ink); font-family: var(--num); }
+
+/* ---- giving the dashboard the whole screen ----------------------------- */
+
+.panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
+.panel__toggle {
+  font: inherit; font-size: .68rem; font-weight: 700; letter-spacing: .04em; cursor: pointer;
+  padding: .28rem .5rem; border-radius: 6px; white-space: nowrap;
+  border: 1px solid var(--line-2); background: var(--bg-4); color: var(--ink-3);
+}
+.panel__toggle:hover { background: var(--bg-5); color: var(--ink); }
+
+@media (min-width: 940px) {
+  body.panel-shut .app { grid-template-columns: 54px minmax(0, 1fr); }
+  body.panel-shut .panel > form,
+  body.panel-shut .panel__head > div { display: none; }
+  body.panel-shut .panel__head { padding: 1rem .5rem; justify-content: center; }
+  body.panel-shut .panel__toggle { padding: .35rem .45rem; }
+}

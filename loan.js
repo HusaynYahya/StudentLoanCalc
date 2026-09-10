@@ -20,7 +20,6 @@
    * -------------------------------------------------------------------- */
 
   var CAREERS = [
-    { id: "custom", label: "Set it myself", note: "Type a starting salary and a rate of increase." },
     {
       id: "grad", label: "Graduate, typical",
       note: "Roughly the middle of the graduate labour market: a slow, steady climb.",
@@ -112,7 +111,8 @@
    * -------------------------------------------------------------------- */
 
   var state = {
-    scen: [],                // the three comparable runs
+    scen: [],                // the comparable runs
+    panelOpen: true,         // the controls, or the whole screen for the charts
     active: 0,               // which one the controls are editing
     showNoLoan: true,        // the life where you never borrowed
     loanMode: "course",      // "course" | "balance"
@@ -142,12 +142,15 @@
       bankBase: num("bankBase", 3.75) / 100,
       thresholdGrowth: num("thresholdGrowth", 3) / 100,
       inflation: num("inflation", 4.1) / 100,
+      savings: num("savings", 4.5) / 100,
       // How a salary line is carried on past its last stated year.
-      salaryGrowth: state.incomeMode === "manual"
-        ? num("inflation", 4.1) / 100                       // holds its real value
-        : ($("career").value === "custom"
-          ? num("salaryGrowth", 4) / 100                    // the rate you typed
-          : num("inflation", 4.1) / 100 + 0.005),           // inflation, plus a slow real rise
+      salaryGrowth: (function () {
+        var p = profile();
+        var infl = num("inflation", 4.1) / 100;
+        if (p.mode === "growth") return p.growth / 100;     // the rate you typed
+        if (p.mode === "manual" || p.mode === "bands") return infl;  // holds its real value
+        return infl + 0.005;                                // a career curve, flattening out
+      })(),
       interestCap: $("useCap").checked ? 0.06 : null,
       interestCapUntil: 2027
     };
@@ -158,42 +161,69 @@
     return E.repaymentStartYear(Math.round(num("startYear", 2026)), Math.round(num("courseYears", 3)));
   }
 
-  /* The predicted salary line, in cash, keyed by tax year. */
+  /* ---------------------------------------------------------------------- *
+   * INCOME PROFILES
+   *
+   * Four ways to say what you will earn. All of them are stated in today's
+   * money and have inflation added when they become cash, so a flat profile
+   * means flat in real terms rather than quietly eroding.
+   * -------------------------------------------------------------------- */
+
+  var BAND_YEARS = 5;
+  var BAND_COUNT = 8;               // 40 years, enough for a Plan 5 term
+
+  var currentProfile = null;        // lent to scenario() for one simulate
+
+  function profile() { return currentProfile || state.scen[state.active]; }
+
   function predictedSalaries(a) {
+    var p = profile();
     var start = repayStartYear();
     var out = {};
-    var career = CAREERS.filter(function (c) { return c.id === $("career").value; })[0] || CAREERS[0];
-    var n = Math.max(state.manualYears, 45);
+    var n = Math.max(p.manualYears || 12, 45);
+    var toCash = function (real, i) {
+      return real * Math.pow(1 + a.inflation, start + i - E.BASE_TAX_YEAR);
+    };
 
-    if (career.id === "custom") {
-      var s = num("startSalary", 30000);
-      var g = num("salaryGrowth", 4) / 100;
-      for (var i = 0; i < n; i++) out[start + i] = s * Math.pow(1 + g, i);
-    } else {
-      for (var j = 0; j < n; j++) {
-        // Real career progression, then inflation from today to that tax year.
-        var real = careerReal(career, j + 1);
-        out[start + j] = real * Math.pow(1 + a.inflation, start + j - E.BASE_TAX_YEAR);
-      }
+    if (p.mode === "growth") {
+      // A starting salary and a rate, both taken at face value in cash.
+      for (var g = 0; g < n; g++) out[start + g] = p.startSalary * Math.pow(1 + p.growth / 100, g);
+      return out;
     }
+
+    if (p.mode === "bands") {
+      for (var b = 0; b < n; b++) {
+        var band = Math.min(Math.floor(b / BAND_YEARS), p.bands.length - 1);
+        out[start + b] = toCash(Number(p.bands[band]) || 0, b);
+      }
+      return out;
+    }
+
+    // A profession: real progression along the curve, inflation on top.
+    var career = CAREERS.filter(function (c) { return c.id === p.career; })[0] || CAREERS[1];
+    if (!career.points) career = CAREERS[1];
+    for (var k = 0; k < n; k++) out[start + k] = toCash(careerReal(career, k + 1), k);
     return out;
   }
 
   function salaries(a) {
+    var p = profile();
     var predicted = predictedSalaries(a);
-    if (state.incomeMode !== "manual") return predicted;
+    if (p.mode !== "manual") return predicted;
+
     var start = repayStartYear();
     var out = {};
-    for (var i = 0; i < state.manualYears; i++) {
+    var years = p.manualYears || 12;
+    for (var i = 0; i < years; i++) {
       var y = start + i;
-      out[y] = state.manual[y] != null ? state.manual[y] : Math.round(predicted[y] || 0);
+      out[y] = p.manual && p.manual[y] != null ? p.manual[y] : Math.round(predicted[y] || 0);
     }
     return out;
   }
 
   function scenario() {
     var a = assumptions();
-    var planKey = $("plan").value;
+    var planKey = profile().plan;
     var start = repayStartYear();
     var loans = [];
 
@@ -220,7 +250,7 @@
       loans: loans,
       salaries: salaries(a),
       assumptions: a,
-      overpayment: { monthly: num("overpay", 0) }
+      overpayment: { monthly: Number(profile().overpay) || 0 }
     };
   }
 
@@ -282,15 +312,23 @@
   var SCEN_META = [
     { id: "A", colour: "var(--sA)" },
     { id: "B", colour: "var(--sB)" },
-    { id: "C", colour: "var(--sC)" }
+    { id: "C", colour: "var(--sC)" },
+    { id: "D", colour: "var(--sD)" },
+    { id: "E", colour: "var(--sE)" }
   ];
+
+  var SEED_CAREERS = ["grad", "medicine", "creative", "engineering", "citylaw"];
 
   function blankScenario(i) {
     return {
       on: i < 2,                       // A and B on to begin with — it is a comparison
-      career: i === 0 ? "grad" : (i === 1 ? "tech" : "creative"),
+      mode: "career",                  // career | growth | bands | manual
+      career: SEED_CAREERS[i] || "grad",
       startSalary: 30000,
       growth: 4,
+      bands: [28000, 36000, 44000, 50000, 54000, 56000, 56000, 56000],
+      manual: {},
+      manualYears: 12,
       plan: "plan5",
       overpay: 0
     };
@@ -304,6 +342,9 @@
     $("salaryGrowth").value = s.growth;
     $("plan").value = s.plan;
     $("overpay").value = s.overpay;
+    selectMode(s.mode);
+    buildBandRows();
+    buildSalaryTable();
     syncSliders();
     markCareer();
     var tag = SCEN_META[state.active].id;
@@ -329,6 +370,37 @@
     s.growth = num("salaryGrowth", 4);
     s.plan = $("plan").value;
     s.overpay = num("overpay", 0);
+  }
+
+  /* ---- the four ways of stating an income -------------------------------- */
+
+  var MODES = ["career", "growth", "bands", "manual"];
+
+  function selectMode(mode) {
+    if (MODES.indexOf(mode) < 0) mode = "career";
+    state.scen[state.active].mode = mode;
+    MODES.forEach(function (m) {
+      var tab = $("tab-" + m), pane = $("pane-" + m);
+      if (tab) tab.setAttribute("aria-selected", m === mode ? "true" : "false");
+      if (pane) pane.hidden = m !== mode;
+    });
+  }
+
+  // Five-year bands: "what will I be on in my first five years, my second…"
+  function buildBandRows() {
+    var host = $("bandRows");
+    if (!host) return;
+    var p = state.scen[state.active];
+    host.innerHTML = p.bands.map(function (v, i) {
+      var from = i * BAND_YEARS + 1, to = from + BAND_YEARS - 1;
+      return '<div class="band">' +
+        '<label for="band' + i + '">Years ' + from + "\u2013" + to + "</label>" +
+        '<span class="ctl__val"><i>\u00a3</i><input type="number" id="band' + i + '" data-band="' + i +
+          '" min="0" max="500000" step="500" value="' + Math.round(v) + '" /></span>' +
+        '<input type="range" tabindex="-1" aria-hidden="true" min="0" max="150000" step="1000" value="' +
+          Math.min(150000, Math.round(v)) + '" data-bandrange="' + i + '" />' +
+        "</div>";
+    }).join("");
   }
 
   function syncSliders() {
@@ -384,11 +456,9 @@
       el.classList.toggle("is-off", !s.on);
       el.querySelector(".scen__pick").setAttribute("aria-selected", i === state.active ? "true" : "false");
       el.querySelector(".scen__on").setAttribute("aria-pressed", s.on ? "true" : "false");
-      var career = CAREERS.filter(function (c) { return c.id === s.career; })[0];
-      el.querySelector("[data-name]").textContent =
-        (career && career.id !== "custom" ? career.label : gbpShort(s.startSalary)) +
-        (s.plan !== "plan5" ? " · " + E.RULES[s.plan].label : "") +
-        (s.overpay > 0 ? " · +" + gbpShort(s.overpay) + "/m" : "");
+      el.querySelector("[data-name]").textContent = scenarioName(s) +
+        (s.plan !== "plan5" ? " \u00b7 " + E.RULES[s.plan].label : "") +
+        (s.overpay > 0 ? " \u00b7 +" + gbpShort(s.overpay) + "/m" : "");
     });
   }
 
@@ -396,31 +466,19 @@
 
   function runAll() {
     var out = [];
-    var keep = state.active;
     state.scen.forEach(function (s, i) {
       if (!s.on) return;
-      state.active = i;                       // scenario() reads the shared controls…
-      var saved = { career: $("career").value, startSalary: $("startSalary").value,
-                    growth: $("salaryGrowth").value, plan: $("plan").value, overpay: $("overpay").value };
-      $("career").value = s.career;           // …so lend them to this scenario briefly
-      $("startSalary").value = s.startSalary;
-      $("salaryGrowth").value = s.growth;
-      $("plan").value = s.plan;
-      $("overpay").value = s.overpay;
-
-      var sim = E.simulate(scenario());
-      sim.meta = SCEN_META[i];
-      sim.index = i;
-      sim.settings = s;
-      out.push(sim);
-
-      $("career").value = saved.career;
-      $("startSalary").value = saved.startSalary;
-      $("salaryGrowth").value = saved.growth;
-      $("plan").value = saved.plan;
-      $("overpay").value = saved.overpay;
+      currentProfile = s;                 // scenario() reads income from here
+      try {
+        var sim = E.simulate(scenario());
+        sim.meta = SCEN_META[i];
+        sim.index = i;
+        sim.settings = s;
+        out.push(sim);
+      } finally {
+        currentProfile = null;
+      }
     });
-    state.active = keep;
     return out;
   }
 
@@ -465,8 +523,11 @@
   }
 
   function scenarioName(s) {
+    if (s.mode === "growth") return gbpShort(s.startSalary) + " +" + s.growth + "%";
+    if (s.mode === "bands") return gbpShort(s.bands[0]) + " \u2192 " + gbpShort(s.bands[s.bands.length - 1]);
+    if (s.mode === "manual") return "typed by year";
     var c = CAREERS.filter(function (x) { return x.id === s.career; })[0];
-    return c && c.id !== "custom" ? c.label : gbpShort(s.startSalary) + " start";
+    return c ? c.label : "Career";
   }
 
   function renderSensitivity(sim) {
@@ -748,7 +809,7 @@
     var total = r.borrowed + r.totalInterest;
     if (!(total > 0)) { $("flowChart").innerHTML = ""; $("flowKey").innerHTML = ""; return; }
 
-    var W = 440, H = 200, ml = 10, iw = W - 20, barH = 46, gap = 26, top = 30;
+    var W = 760, H = 200, ml = 10, iw = W - 20, barH = 46, gap = 26, top = 30;
     var bar = function (yPos, segs) {
       var xc = ml, out = "";
       segs.forEach(function (s) {
@@ -761,6 +822,11 @@
             '" font-size="12.5" font-weight="600" fill="#0b0e13">' + s.label + "</text>" +
             '<text x="' + (xc + 10).toFixed(1) + '" y="' + (yPos + 35) +
             '" font-size="13" fill="#0b0e13" opacity=".88">' + gbp(s.value) + "</text>";
+        } else {
+          // Too narrow to write inside; label it underneath instead.
+          out += '<text x="' + (xc + w / 2).toFixed(1) + '" y="' + (yPos + barH + 12) +
+            '" text-anchor="middle" font-size="10.5" fill="' + s.colour + '">' +
+            s.label + " " + gbpShort(s.value) + "</text>";
         }
         xc += w;
       });
@@ -851,6 +917,137 @@
     $("barsKey").innerHTML = '<i style="color:var(--ink-4)">Cash handed over across the whole term</i>';
   }
 
+  /* ---- the facts that decide everything, always in view ------------------ */
+
+  function renderFacts(runs) {
+    var a = runs[0].assumptions;
+    var plans = {};
+    runs.forEach(function (s) { plans[s.settings.plan] = true; });
+    var planNames = Object.keys(plans).map(function (k) { return E.RULES[k].label; }).join(", ");
+
+    var facts = [
+      { k: "Plan", v: planNames },
+      { k: "RPI", v: pct(a.rpi) },
+      { k: "Inflation", v: pct(a.inflation) },
+      { k: "Thresholds", v: "+" + pct(a.thresholdGrowth) + " a year" },
+      { k: "Savings", v: pct(a.savings) },
+      { k: "Threshold now", v: gbp(E.thresholdFor(runs[0].settings.plan, Math.max(E.BASE_TAX_YEAR, repayStartYear()), a)) }
+    ];
+    $("facts").innerHTML = facts.map(function (f) {
+      return "<div><dt>" + f.k + "</dt><dd>" + f.v + "</dd></div>";
+    }).join("");
+  }
+
+  /* ---- the selected profile, in full ------------------------------------- *
+   * Everything about one profile on one screen: what it costs, and what the
+   * same money would have done had it never left your hands.
+   * ---------------------------------------------------------------------- */
+
+  function renderFocus(runs) {
+    var sim = runs.filter(function (s) { return s.index === state.active; })[0] || runs[0];
+    var r = sim.combined, o = sim.opportunity;
+    var real = state.basis === "real";
+    var money = function (cash, deflated) { return gbp(real ? deflated : cash); };
+
+    $("whoFocus").textContent = sim.meta.id;
+    $("whoFocus").style.color = sim.meta.colour;
+    $("focusCard").style.setProperty("--c", sim.meta.colour);
+
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    var firstPaid = repaying.filter(function (y) { return y.monthlyRepayment > 0; })[0];
+    var peak = repaying.reduce(function (m, y) { return Math.max(m, y.monthlyRepayment); }, 0);
+
+    var rows = [
+      { g: "The loan", k: "Borrowed", v: gbp(r.borrowed) },
+      { g: "The loan", k: "Owed when repayment starts", v: gbp(r.balanceAtRepayStart) },
+      { g: "The loan", k: "Interest charged", v: gbp(r.totalInterest), c: "warn" },
+      { g: "The loan", k: "Peak balance", v: gbp(repaying.reduce(function (m, y) {
+          return Math.max(m, y.closingBalance); }, r.balanceAtRepayStart)) },
+
+      { g: "What you pay", k: "Handed over, in cash", v: gbp(r.totalRepaid), c: "good" },
+      { g: "What you pay", k: "Handed over, today's money", v: gbp(r.totalRealRepaid), c: "good" },
+      { g: "What you pay", k: "First deduction", v: firstPaid ? gbp(firstPaid.monthlyRepayment) + " a month" : "never" },
+      { g: "What you pay", k: "Peak deduction", v: gbp(peak) + " a month" },
+      { g: "What you pay", k: "Years repaying", v: String(r.yearsRepaying) },
+      { g: "What you pay", k: r.everRepaidInFull ? "Cleared" : "Written off",
+        v: r.everRepaidInFull ? r.clearedLabel : gbp(r.writtenOff) + " in " + r.writeOffLabel,
+        c: r.everRepaidInFull ? "good" : "bad" },
+
+      { g: "Or you could have saved it", k: "Clear it today, in one payment", v: gbp(o.lump) },
+      { g: "Or you could have saved it", k: "…that lump, saved for " + o.years + " years",
+        v: money(o.fvLump, o.realFvLump) },
+      { g: "Or you could have saved it", k: "Your repayments, saved as you go",
+        v: money(o.fvRepayments, o.realFvRepayments) },
+      { g: "Or you could have saved it", k: "Cheaper option",
+        v: o.clearingIsBetter ? "clear it today" : "keep the money",
+        c: o.clearingIsBetter ? "warn" : "good" },
+      { g: "Or you could have saved it", k: "By",
+        v: money(Math.abs(o.clearingSaves), Math.abs(o.realClearingSaves)) }
+    ];
+
+    var groups = [];
+    rows.forEach(function (row) {
+      var g = groups.filter(function (x) { return x.name === row.g; })[0];
+      if (!g) { g = { name: row.g, rows: [] }; groups.push(g); }
+      g.rows.push(row);
+    });
+
+    $("focusGrid").innerHTML = groups.map(function (g) {
+      return '<div class="fgroup"><h4>' + g.name + "</h4><dl>" + g.rows.map(function (row) {
+        return "<div><dt>" + row.k + '</dt><dd class="' + (row.c || "") + '">' + row.v + "</dd></div>";
+      }).join("") + "</dl></div>";
+    }).join("");
+
+    renderOppChart(sim);
+
+    $("oppVerdict").innerHTML = o.years === 0
+      ? "Nothing is ever deducted on this profile, so there is nothing to weigh against saving."
+      : (o.clearingIsBetter
+        ? "Clearing the balance today would cost <b>" + gbp(o.lump) + "</b> — and even after giving up " +
+          pct(o.savingsRate) + " a year on that money for " + o.years + " years, it comes out <b>" +
+          gbp(Math.abs(o.clearingSaves)) + "</b> ahead of repaying as required."
+        : "Clearing the balance today would cost <b>" + gbp(o.lump) + "</b> now. Keeping that money and " +
+          "letting it earn " + pct(o.savingsRate) + " while you repay as required leaves you <b>" +
+          gbp(Math.abs(o.clearingSaves)) + "</b> better off by " + (repaying.length ?
+          E.taxYearLabel(repaying[repaying.length - 1].taxYear + 1) : "the end") +
+          " — because deductions spread over decades are cheap money, and the write-off may cancel what is left.");
+  }
+
+  /* ---- the two choices, racing --------------------------------------------
+   * One line is the repayments piling up with interest you never earned; the
+   * other is the balance you did not clear, growing. Where they cross is the
+   * moment one choice overtakes the other.
+   * ---------------------------------------------------------------------- */
+
+  function renderOppChart(sim) {
+    var o = sim.opportunity;
+    if (!o.track.length) { $("oppChart").innerHTML = ""; $("oppKey").innerHTML = ""; return; }
+
+    var pts = o.track.map(function (t) {
+      return { taxYear: t.taxYear, label: t.label, v: t.repaymentsSaved, w: t.lumpGrown };
+    });
+    var max = 0;
+    pts.forEach(function (p) { max = Math.max(max, p.v, p.w); });
+    var s = niceScale(max);
+    var f = frame({ years: pts, xMin: pts[0].taxYear, xMax: pts[pts.length - 1].taxYear,
+                    top: s.top, step: s.step, fmt: gbpShort, w: 760, h: 260,
+                    title: "Repaying as required against clearing the balance today and saving" });
+
+    var lineW = pts.map(function (p, i) {
+      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p.w).toFixed(1);
+    }).join(" ");
+
+    $("oppChart").innerHTML = f.open +
+      '<path d="' + line(pts, f) + '" fill="none" stroke="' + sim.meta.colour + '" stroke-width="2.25"/>' +
+      '<path d="' + lineW + '" fill="none" stroke="var(--warn)" stroke-width="2.25" stroke-dasharray="5 4"/>' +
+      f.close;
+
+    $("oppKey").innerHTML =
+      '<i style="color:' + sim.meta.colour + '">Your repayments, saved instead</i>' +
+      '<i class="k-int">The balance you did not clear, growing at ' + pct(o.savingsRate) + "</i>" +
+      '<i style="color:var(--ink-4)">whichever is lower is the cheaper choice</i>';
+  }
+
   /* ---- shared plumbing --------------------------------------------------- */
 
   function line(pts, f) {
@@ -888,6 +1085,7 @@
   }
 
   function renderAllCharts(runs) {
+    renderFacts(runs);
     renderChart(runs);
     renderSalaryChart(runs);
     renderMonthlyChart(runs);
@@ -895,6 +1093,7 @@
     renderFlowChart(runs);
     renderCostChart(runs);
     renderBarsChart(runs);
+    renderFocus(runs);
   }
 
   function rateExplanation(sim) {
@@ -1050,16 +1249,13 @@
     var tenth = sal[start + 9] || 0;
     var career = CAREERS.filter(function (c) { return c.id === $("career").value; })[0];
     $("careerNote").textContent = career ? career.note : "";
-    $("customSalary").hidden = !!(career && career.id !== "custom");
     markCareer();
     markLength();
 
     $("predictSummary").innerHTML =
       "Starting on <b>" + gbp(firstSal) + "</b> in " + E.taxYearLabel(start) +
       " and reaching <b>" + gbp(tenth) + "</b> ten years later" +
-      (career && career.id !== "custom"
-        ? ", with inflation of " + pct(a.inflation) + " added to the career curve."
-        : ".");
+      (profile().mode === "growth" ? "." : ", with inflation of " + pct(a.inflation) + " added on top.");
   }
 
   /* ---------------------------------------------------------------------- *
@@ -1067,17 +1263,20 @@
    * -------------------------------------------------------------------- */
 
   function buildSalaryTable() {
+    var host = $("salaryRows");
+    if (!host) return;
+    var p = state.scen[state.active];
     var a = assumptions();
     var predicted = predictedSalaries(a);
     var start = repayStartYear();
     var rows = "";
-    for (var i = 0; i < state.manualYears; i++) {
+    for (var i = 0; i < (p.manualYears || 12); i++) {
       var y = start + i;
-      var v = state.manual[y] != null ? state.manual[y] : Math.round(predicted[y] || 0);
+      var v = p.manual && p.manual[y] != null ? p.manual[y] : Math.round(predicted[y] || 0);
       rows += "<tr><td>" + E.taxYearLabel(y) + '</td><td class="age">' + ageAt(y) + "</td>" +
         '<td><input type="number" min="0" max="1000000" step="500" data-year="' + y + '" value="' + Math.round(v) + '" /></td></tr>';
     }
-    $("salaryRows").innerHTML = rows;
+    host.innerHTML = rows;
   }
 
   /* ---------------------------------------------------------------------- *
@@ -1137,7 +1336,8 @@
       var data = { state: {
         loanMode: state.loanMode, incomeMode: state.incomeMode,
         manual: state.manual, manualYears: state.manualYears,
-        scen: state.scen, active: state.active, showNoLoan: state.showNoLoan
+        scen: state.scen, active: state.active, showNoLoan: state.showNoLoan,
+        panelOpen: state.panelOpen
       }, fields: {} };
       FIELDS.forEach(function (id) {
         var el = $(id);
@@ -1163,9 +1363,10 @@
         state.incomeMode = data.state.incomeMode || "predict";
         state.manual = data.state.manual || {};
         state.manualYears = data.state.manualYears || 12;
-        if (Array.isArray(data.state.scen) && data.state.scen.length === 3) state.scen = data.state.scen;
+        if (Array.isArray(data.state.scen) && data.state.scen.length === SCEN_META.length) state.scen = data.state.scen;
         if (typeof data.state.active === "number") state.active = data.state.active;
         if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
+        if (typeof data.state.panelOpen === "boolean") state.panelOpen = data.state.panelOpen;
       }
       return true;
     } catch (e) { return false; }
@@ -1187,6 +1388,8 @@
 
       var ctl = box.closest(".ctl");
       if (!ctl) return;
+      if (box.dataset.slid) return;      // already fitted; this runs more than once
+      box.dataset.slid = "1";
       var range = document.createElement("input");
       range.type = "range";
       range.min = lo; range.max = hi; range.step = step;
@@ -1221,8 +1424,8 @@
   function buildCareerCards() {
     var host = $("careerCards");
     host.innerHTML = CAREERS.map(function (c) {
-      var keys = c.points ? Object.keys(c.points).map(Number).sort(function (a, b) { return a - b; }) : null;
-      var from = keys ? "from " + gbpShort(c.points[keys[0]]) : "your own figures";
+      var keys = Object.keys(c.points).map(Number).sort(function (a, b) { return a - b; });
+      var from = "from " + gbpShort(c.points[keys[0]]);
       return '<button type="button" class="pick" role="radio" aria-checked="false" data-career="' + c.id + '">' +
         "<b>" + c.label + "</b><span>" + from + "</span></button>";
     }).join("");
@@ -1233,7 +1436,6 @@
       $("career").value = btn.dataset.career;
       captureScenario();
       markCareer();
-      if (state.incomeMode === "manual") { state.manual = {}; buildSalaryTable(); }
       run();
     });
   }
@@ -1321,16 +1523,23 @@
   }
 
   function wire() {
+    // Income mode
+    document.querySelectorAll("[data-mode]").forEach(function (t) {
+      t.addEventListener("click", function () {
+        selectMode(t.dataset.mode);
+        buildBandRows();
+        buildSalaryTable();
+        fitSliders();
+        run();
+      });
+    });
+
     // Tabs
     document.querySelectorAll('[role="tab"][data-tab]').forEach(function (t) {
       t.addEventListener("click", function () {
         var name = t.dataset.tab;
         selectTab(t.parentNode, name);
         if (name === "course" || name === "balance") state.loanMode = name;
-        if (name === "predict" || name === "manual") {
-          state.incomeMode = name;
-          if (name === "manual") buildSalaryTable();
-        }
         run();
       });
     });
@@ -1338,9 +1547,28 @@
     // Any input rerun the simulation
     $("form").addEventListener("input", function (ev) {
       var t = ev.target;
+      var p = state.scen[state.active];
+
       if (t.dataset && t.dataset.year) {
         var v = parseFloat(t.value);
-        state.manual[t.dataset.year] = isFinite(v) ? Math.max(0, v) : 0;
+        if (!p.manual) p.manual = {};
+        p.manual[t.dataset.year] = isFinite(v) ? Math.max(0, v) : 0;
+        run();
+        return;
+      }
+      if (t.dataset && t.dataset.band != null) {
+        var bv = parseFloat(t.value);
+        p.bands[Number(t.dataset.band)] = isFinite(bv) ? Math.max(0, bv) : 0;
+        var mate = document.querySelector('[data-bandrange="' + t.dataset.band + '"]');
+        if (mate) mate.value = clamp(p.bands[Number(t.dataset.band)], 0, 150000);
+        run();
+        return;
+      }
+      if (t.dataset && t.dataset.bandrange != null) {
+        var rv = parseFloat(t.value);
+        p.bands[Number(t.dataset.bandrange)] = rv;
+        var box = $("band" + t.dataset.bandrange);
+        if (box) box.value = Math.round(rv);
         run();
         return;
       }
@@ -1349,9 +1577,10 @@
         if (l) $("maintenance").value = l.max;
       }
       if (t.id === "hasPgl") $("pglRow").hidden = !t.checked;
-      if (t.id === "birthYear" && state.incomeMode === "manual") buildSalaryTable();
-      if (t.id === "career" || t.id === "startYear" || t.id === "repayStartYear") {
-        if (state.incomeMode === "manual") { state.manual = {}; buildSalaryTable(); }
+      if (t.id === "birthYear") buildSalaryTable();
+      if (t.id === "startYear" || t.id === "repayStartYear") {
+        state.scen[state.active].manual = {};
+        buildSalaryTable();
       }
       run();
     });
@@ -1359,11 +1588,12 @@
 
     // Salary table controls
     $("addYears").addEventListener("click", function () {
-      state.manualYears = Math.min(state.manualYears + 5, 45);
+      var p = state.scen[state.active];
+      p.manualYears = Math.min((p.manualYears || 12) + 5, 45);
       buildSalaryTable(); run();
     });
     $("resetSalaries").addEventListener("click", function () {
-      state.manual = {}; buildSalaryTable(); run();
+      state.scen[state.active].manual = {}; buildSalaryTable(); run();
     });
 
     // Cash / today's money
@@ -1398,6 +1628,13 @@
 
     $("downloadCsv").addEventListener("click", download);
 
+    $("panelToggle").addEventListener("click", function () {
+      state.panelOpen = !state.panelOpen;
+      applyPanel();
+      if (lastRuns) renderAllCharts(lastRuns);   // the charts have more room now
+      save();
+    });
+
     $("showNoLoan").addEventListener("change", function () {
       state.showNoLoan = $("showNoLoan").checked;
       run();
@@ -1414,6 +1651,14 @@
     $("form").addEventListener("submit", function (ev) { ev.preventDefault(); });
   }
 
+  function applyPanel() {
+    document.body.classList.toggle("panel-shut", !state.panelOpen);
+    var btn = $("panelToggle");
+    btn.setAttribute("aria-expanded", state.panelOpen ? "true" : "false");
+    btn.textContent = state.panelOpen ? "\u2190 Hide controls" : "\u2192";
+    btn.title = state.panelOpen ? "Hide the controls" : "Show the controls";
+  }
+
   function toggleYear(y) {
     state.openYears[y] = !state.openYears[y];
     renderLog(lastSim);
@@ -1425,7 +1670,7 @@
     buildCareerCards();
     buildLengthChips();
     buildScenTabs();
-    state.scen = [blankScenario(0), blankScenario(1), blankScenario(2)];
+    state.scen = [0,1,2,3,4].map(blankScenario);
     var restored = restore();
     if (!restored) {
       $("plan").value = "plan5";
@@ -1433,14 +1678,14 @@
     }
     $("pglRow").hidden = !$("hasPgl").checked;
     selectTab($("tab-course").parentNode, state.loanMode);
-    selectTab($("tab-predict").parentNode, state.incomeMode);
     $("plan").addEventListener("change", function () {
       $("planBlurb").textContent = E.RULES[$("plan").value].blurb;
     });
-    if (state.incomeMode === "manual") buildSalaryTable();
     fitSliders();
     $("showNoLoan").checked = state.showNoLoan;
+    applyPanel();
     loadScenario();
+    fitSliders();
     markScens();
     markCareer();
     markLength();

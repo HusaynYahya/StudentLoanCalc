@@ -17,61 +17,58 @@ Open `index.html`. No build step, no framework, no network requests.
 `engine.js` is pure — circumstances in, ledger out, no DOM — and loads under
 both `<script>` and `require()`, which is how the tests run it.
 
-## Comparison is the point
+## Income profiles
 
-The dashboard runs up to **three scenarios at once**, plus the life where you
-never borrowed at all, and overlays them on every chart. Each scenario carries
-its own career, starting salary, pay rise, repayment plan and voluntary
-overpayment; the course, the assumptions and the write-off rules are shared,
-so you are comparing lives rather than comparing settings.
+The dashboard runs up to **five income profiles at once**, plus the life where
+you never borrowed, and overlays them on every chart. Each profile carries its
+own income, repayment plan and voluntary overpayment; the course, the
+assumptions and the rules are shared, so what is being compared is lives rather
+than settings.
 
-Only one set of income controls exists in the page. The scenario tabs load a
-run into it and edits are written back, so every input keeps a stable id — and
-the panel tints to whichever scenario you are editing, so it is never ambiguous
-which line on the chart a slider is moving.
+There are four ways to state an income, and a profile can use any of them:
 
-The headline is the comparison itself: what each life hands over, side by side,
-with the spread between the cheapest and dearest spelled out underneath. The
-"no loan" column is always £0, which is the honest baseline — the whole of what
-you hand over is what having borrowed costs you.
-
-## The interface
-
-A split-screen instrument, dark and numbers-first. Controls are pinned in a
-panel on the left that scrolls on its own; results fill the right and scroll
-independently, with the headline figure sticky at the top so it never leaves
-view while you work.
-
-**Sliders.** Any number carrying `data-slider="min,max,step"` gets a range
-control fitted under its label automatically. The value sits on the label line
-as an editable figure rather than a second box — one control, not two. The
-slider covers the sensible range; typing still accepts anything outside it.
-
-**Career paths.** Thirteen as a compact two-column list — doctor, engineer,
-teacher, nurse, solicitor, City law, software, accountancy, civil service,
-arts, low-earning, and "set it myself". Each is a curve of anchor salaries in
-*today's* money (first year, third, sixth, tenth, twentieth), interpolated
-geometrically, with inflation added when it becomes cash. Illustrative starting
-points, not forecasts — they exist to be edited.
-
-## The charts
-
-| | What it shows |
+| | |
 | --- | --- |
-| **The balance** | What you owe, what you have repaid and what interest has been charged — the grey line usually rises for years before it falls |
-| **Salary against the threshold** | The two lines, with the charged band shaded: you pay 9% of the gap and nothing on the rest |
-| **What leaves your pay** | The monthly deduction over time — the figure you would notice on a payslip |
-| **The interest rate** | A step line per loan against RPI, so Plan 2's slide with income and the cap lapsing are both visible |
-| **Where it ends up** | Two bars of identical length, because they are the same money from each end: borrowed + interest = repaid + written off, exactly |
-| **The running cost of a loan** | Everything handed over, accumulating, one line per scenario — with the flat line along the bottom being the life where you never borrowed |
-| **Side by side** | Lifetime cost per scenario as bars, against never having borrowed |
+| **Profession** | One of twelve career curves — doctor, engineer, teacher, nurse, solicitor, City law, software, accountancy, civil service, arts, low-earning |
+| **Start + growth** | A starting salary and a percentage a year, taken at face value in cash |
+| **5-year bands** | What you expect to earn in each five-year stretch, in today's money, with inflation added on top |
+| **Year by year** | Every year, yours to set — £0 for a career break |
 
-A cash / today's-money toggle redraws all of them. Below the charts sit the
-sensitivity panel, the milestones, the year-by-year log and the rules.
+Only one set of income controls exists in the page: the profile tabs load a
+profile into it and edits are written back, and the panel tints to whichever
+profile is selected so it is never ambiguous which line a slider is moving.
+
+## The other thing you could do with the money
+
+Handing over £137,053 sounds worse than clearing a £67,854 balance today — but
+the two numbers fall at different times, and money paid in 2057 is not money
+paid now. So both choices are carried forward to the year the loan ends, at
+the savings rate you set:
+
+- **Repay as required** — the stream of deductions, each compounded from the
+  year it was paid.
+- **Clear it today** — the whole balance, compounded from now.
+
+Whichever is the smaller pile at that date is the choice that actually cost
+less. On a typical graduate profile at 4.5%, keeping the money wins by about
+£10,500: deductions spread over decades are cheap money, and the write-off may
+cancel what is left. Drop the savings rate low enough and it flips.
+
+The selected profile gets a panel of its own with every number on one screen —
+the loan, what you pay, and what the same money would have done in a savings
+account — plus a chart of the two choices racing each other.
+
+## What is always in view
+
+A strip along the top of the results carries the things that decide everything
+and are easy to forget: **which plan** each profile is on, **RPI**, **inflation**,
+how fast **thresholds** rise, the **savings return**, and the threshold in cash
+today. Interest rates get a chart of their own, since they move — Plan 2 slides
+with income, and the announced cap lapses.
 
 ## The two ways to give it an income
 
-**Type it in.** Instead of a career card, a table of one row per tax year, pre-filled from the prediction
+A note on the year-by-year table: one row per tax year, pre-filled from the prediction
 so you are editing rather than typing forty numbers. Any year can be set to £0
 for a career break, a year out or further study — the engine takes it literally
 and deducts nothing that year. Past the last row the last figure carries on
