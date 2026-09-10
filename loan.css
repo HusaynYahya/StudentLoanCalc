@@ -562,3 +562,37 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   body.panel-shut .panel__head { padding: 1rem .5rem; justify-content: center; }
   body.panel-shut .panel__toggle { padding: .35rem .45rem; }
 }
+
+/* ---- the three headline boxes ------------------------------------------ */
+
+.bigs {
+  display: grid; gap: 1px; margin: 1.1rem clamp(1rem, 3vw, 2rem) 0;
+  grid-template-columns: 1fr;
+  background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--r); overflow: hidden; position: relative;
+}
+@media (min-width: 780px) { .bigs { grid-template-columns: repeat(3, 1fr); } }
+
+.big {
+  background: var(--bg-3); padding: 1.15rem 1.25rem 1.2rem;
+  border-top: 2px solid var(--c, var(--ink-4));
+}
+.big.cool { border-top-color: var(--info); }
+.big.warm { border-top-color: var(--warn); }
+.big__k {
+  margin: 0 0 .35rem; font-size: .66rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+}
+.big__v {
+  margin: 0; font-family: var(--num); font-size: clamp(1.9rem, 3.6vw, 2.7rem);
+  line-height: 1; letter-spacing: -.035em; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.big.cool .big__v { color: var(--info); }
+.big.warm .big__v { color: var(--warn); }
+.big__s { margin: .5rem 0 0; font-size: .755rem; line-height: 1.5; color: var(--ink-4); max-width: 42ch; }
+.bigs__who {
+  grid-column: 1 / -1; margin: 0; background: var(--bg-3);
+  padding: .45rem 1.25rem; font-size: .72rem; color: var(--ink-4);
+  border-top: 1px solid var(--line);
+}
+.bigs__who b { font-family: var(--num); font-weight: 700; }

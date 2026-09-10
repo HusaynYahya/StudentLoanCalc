@@ -419,6 +419,25 @@ test("the track has a row per repaying year, both choices side by side", functio
   }
 });
 
+test("the growth given up is the pot less what you put into it", function () {
+  var s = withSalary(60000);
+  var o = s.opportunity, r = s.combined;
+  near(o.paidOut, r.totalRepaid, 1, "what you put in is what you handed over");
+  near(o.foregoneGrowth, o.fvRepayments - o.paidOut, 0.01, "growth is the pot less the contributions");
+  ok(o.foregoneGrowth > 0, "at a positive savings rate there is growth to give up");
+});
+
+test("with nowhere to save it, no growth is given up", function () {
+  var o = withSalary(60000, { assumptions: { savings: 0 } }).opportunity;
+  near(o.foregoneGrowth, 0, 1, "a 0% account forfeits nothing");
+});
+
+test("a higher savings rate gives up more", function () {
+  var low = withSalary(60000, { assumptions: { savings: 0.02 } }).opportunity;
+  var high = withSalary(60000, { assumptions: { savings: 0.07 } }).opportunity;
+  ok(high.foregoneGrowth > low.foregoneGrowth * 2, "much more, in fact");
+});
+
 test("today's money is smaller than the cash figure, for both choices", function () {
   var o = withSalary(60000).opportunity;
   ok(o.realFvRepayments < o.fvRepayments, "repayments deflate");

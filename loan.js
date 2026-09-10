@@ -928,6 +928,54 @@
     $("barsKey").innerHTML = '<i style="color:var(--ink-4)">Cash handed over across the whole term</i>';
   }
 
+  /* ---- the three figures that matter most -------------------------------- *
+   * For the selected profile: what it costs in cash, what that is worth in
+   * the money of the year the loan was taken out, and what the same payments
+   * would have earned had they gone into a savings account instead.
+   * ---------------------------------------------------------------------- */
+
+  function renderBigs(runs) {
+    var sim = runs.filter(function (s) { return s.index === state.active; })[0] || runs[0];
+    var r = sim.combined, o = sim.opportunity;
+    var baseYear = r.years.length ? r.years[0].label : "today";
+
+    var boxes = [
+      {
+        k: "Total repayment",
+        v: gbp(r.totalRepaid),
+        sub: r.everRepaidInFull
+          ? "cash handed over, cleared in " + r.clearedLabel
+          : "cash handed over before " + gbp(r.writtenOff) + " was written off",
+        tone: ""
+      },
+      {
+        k: "In " + baseYear + " money",
+        v: gbp(r.totalRealRepaid),
+        sub: "the same repayments, valued when the loan was taken out, at " +
+             pct(sim.assumptions.inflation) + " inflation",
+        tone: "cool"
+      },
+      {
+        k: "Growth given up",
+        v: gbp(o.foregoneGrowth),
+        sub: o.foregoneGrowth > 0
+          ? "those repayments saved at " + pct(o.savingsRate) + " would have become " +
+            gbp(o.fvRepayments) + " — this is the part you never earned"
+          : "nothing is deducted on this profile, so nothing is forfeited",
+        tone: "warm"
+      }
+    ];
+
+    $("bigs").innerHTML = boxes.map(function (bx) {
+      return '<div class="big ' + bx.tone + '" style="--c:' + sim.meta.colour + '">' +
+        '<p class="big__k">' + bx.k + "</p>" +
+        '<p class="big__v">' + bx.v + "</p>" +
+        '<p class="big__s">' + bx.sub + "</p></div>";
+    }).join("") +
+      '<p class="bigs__who">Profile <b style="color:' + sim.meta.colour + '">' + sim.meta.id +
+      "</b> · " + scenarioName(sim.settings) + "</p>";
+  }
+
   /* ---- the facts that decide everything, always in view ------------------ */
 
   function renderFacts(runs) {
@@ -1161,6 +1209,7 @@
   }
 
   function renderAllCharts(runs) {
+    renderBigs(runs);
     renderFacts(runs);
     renderChart(runs);
     renderSalaryChart(runs);

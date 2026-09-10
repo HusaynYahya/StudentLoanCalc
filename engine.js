@@ -571,6 +571,7 @@
     if (!repaying.length) {
       return { lump: r.balanceAtRepayStart || 0, years: 0, savingsRate: s,
                fvRepayments: 0, fvLump: r.balanceAtRepayStart || 0,
+               paidOut: 0, foregoneGrowth: 0, realForegoneGrowth: 0,
                clearingSaves: -(r.balanceAtRepayStart || 0), clearingIsBetter: false,
                realFvRepayments: 0, realFvLump: r.balanceAtRepayStart || 0,
                realClearingSaves: -(r.balanceAtRepayStart || 0), track: [] };
@@ -600,12 +601,22 @@
     var fvLump = lump * Math.pow(1 + s, span);
     var deflate = Math.pow(1 + infl, -span);
 
+    // What the repayments would have earned on top of themselves had they gone
+    // into a savings account instead: the pot, less what you actually put in.
+    // This is the growth forfeited, not the money — that you were always going
+    // to part with.
+    var paidOut = repaying.reduce(function (t, y) { return t + y.repaid + y.voluntary; }, 0);
+    var foregoneGrowth = fvRepayments - paidOut;
+
     return {
       lump: lump,
       years: span,
       savingsRate: s,
       fvRepayments: fvRepayments,
       fvLump: fvLump,
+      paidOut: paidOut,
+      foregoneGrowth: foregoneGrowth,
+      realForegoneGrowth: foregoneGrowth * deflate,
       // Positive means clearing the balance today was the cheaper of the two.
       clearingSaves: fvRepayments - fvLump,
       clearingIsBetter: fvRepayments > fvLump,

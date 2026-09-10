@@ -38,6 +38,20 @@ Only one set of income controls exists in the page: the profile tabs load a
 profile into it and edits are written back, and the panel tints to whichever
 profile is selected so it is never ambiguous which line a slider is moving.
 
+## The three headline figures
+
+A band of three boxes sits above the charts, for whichever profile is selected:
+
+| | |
+| --- | --- |
+| **Total repayment** | The cash handed over, added up |
+| **In 2026/27 money** | The same repayments valued in the money of the year the loan was taken out — a payment in 2057 is not a payment now |
+| **Growth given up** | What those repayments would have earned had they gone into a savings account instead: the pot, less what you put in. Not the money itself — you were always going to part with that — but the growth it never made |
+
+The third is the one worth sitting with. A graduate handing over £137,053 has
+also forfeited about £75,000 of compound growth on the way, which never appears
+on any statement.
+
 ## The other thing you could do with the money
 
 Handing over £137,053 sounds worse than clearing a £67,854 balance today — but
