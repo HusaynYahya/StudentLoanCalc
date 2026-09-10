@@ -596,3 +596,15 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   border-top: 1px solid var(--line);
 }
 .bigs__who b { font-family: var(--num); font-weight: 700; }
+
+/* ---- breaks in employment ---------------------------------------------- */
+
+.breaks { display: grid; gap: .4rem; }
+.brk { display: flex; align-items: baseline; gap: .4rem; }
+.brk__lab { font-size: .74rem; color: var(--ink-4); }
+.brk .ctl__val input { width: 4.4ch; }
+.brk__x {
+  margin-left: auto; font: inherit; font-size: 1rem; line-height: 1; cursor: pointer;
+  border: 0; background: none; color: var(--ink-4); padding: .1rem .3rem; border-radius: 4px;
+}
+.brk__x:hover { color: var(--bad); background: var(--bg-4); }

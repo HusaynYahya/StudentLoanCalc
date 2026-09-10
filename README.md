@@ -17,6 +17,27 @@ Open `index.html`. No build step, no framework, no network requests.
 `engine.js` is pure — circumstances in, ledger out, no DOM — and loads under
 both `<script>` and `require()`, which is how the tests run it.
 
+## The timeline
+
+Education and work are not assumed to run straight into one another. The
+timeline is set out explicitly:
+
+- **Undergraduate** — the September it starts, and how long it runs
+- **Postgraduate** — optional, with its own start year and length. It is a real
+  course, not a bare balance: interest accrues while you study it, and its
+  repayments begin the April after *it* ends, which is later than the
+  undergraduate one
+- **Work** — the year pay actually starts, which may be years after either
+  course. Repayments still fall due on the statutory date; nothing is deducted
+  until there is pay to deduct from
+- **Breaks** — any number of year ranges with no income at all: a year out,
+  caring, illness, redundancy, further study. Each profile has its own, so
+  "with a career break" and "without" can sit side by side on the same chart
+
+The later dates follow the earlier ones as you move them, until you place one
+yourself — after which it stays where you put it. A postgraduate course can
+never be proposed starting before the degree it follows.
+
 ## Income profiles
 
 The dashboard runs up to **five income profiles at once**, plus the life where

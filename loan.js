@@ -113,6 +113,8 @@
   var state = {
     scen: [],                // the comparable runs
     panelOpen: true,         // the controls, or the whole screen for the charts
+    pgTouched: false,        // has the reader placed these dates themselves?
+    workTouched: false,
     active: 0,               // which one the controls are editing
     showNoLoan: true,        // the life where you never borrowed
     loanMode: "course",      // "course" | "balance"
@@ -162,6 +164,69 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * THE TIMELINE
+   *
+   * Education and work are no longer assumed to run straight into one another.
+   * An undergraduate course, optionally a postgraduate one, and a year work
+   * actually starts — which may be later than either, and need not be the year
+   * repayments become due. Repayment dates follow the law; income follows the
+   * life.
+   * -------------------------------------------------------------------- */
+
+  function timeline() {
+    var ugStart = Math.round(num("startYear", 2026));
+    var ugYears = Math.round(num("courseYears", 3));
+    var pg = $("hasPgl").checked;
+    var pgStart = Math.round(num("pgStartYear", ugStart + ugYears));
+    var pgYears = Math.round(num("pgYears", 1));
+    return {
+      ugStart: ugStart,
+      ugYears: ugYears,
+      ugEnds: ugStart + ugYears,                       // the summer it finishes
+      ugRepayFrom: E.repaymentStartYear(ugStart, ugYears),
+      pg: pg,
+      pgStart: pgStart,
+      pgYears: pgYears,
+      pgEnds: pgStart + pgYears,
+      pgRepayFrom: E.repaymentStartYear(pgStart, pgYears),
+      workStart: Math.round(num("workStartYear", ugStart + ugYears))
+    };
+  }
+
+  // The year work would naturally begin if nothing intervened.
+  function defaultWorkStart(t) {
+    return t.pg ? t.pgEnds : t.ugEnds;
+  }
+
+  /* ---- breaks in employment ---------------------------------------------- */
+
+  function breaksOf(p) { return Array.isArray(p.breaks) ? p.breaks : []; }
+
+  function inBreak(p, taxYear) {
+    return breaksOf(p).some(function (b) {
+      return taxYear >= Number(b.from) && taxYear <= Number(b.to);
+    });
+  }
+
+  function buildBreakRows() {
+    var host = $("breakRows");
+    if (!host) return;
+    var p = state.scen[state.active];
+    var list = breaksOf(p);
+    host.innerHTML = list.length
+      ? list.map(function (b, i) {
+          return '<div class="brk">' +
+            '<span class="brk__lab">From</span>' +
+            '<span class="ctl__val"><input type="number" data-brk="' + i + '" data-end="from" min="2000" max="2090" step="1" value="' + b.from + '" /></span>' +
+            '<span class="brk__lab">to</span>' +
+            '<span class="ctl__val"><input type="number" data-brk="' + i + '" data-end="to" min="2000" max="2090" step="1" value="' + b.to + '" /></span>' +
+            '<button type="button" class="brk__x" data-drop="' + i + '" aria-label="Remove this break">\u00d7</button>' +
+            "</div>";
+        }).join("")
+      : '<p class="note">No breaks — income runs unbroken from the year work starts.</p>';
+  }
+
+  /* ---------------------------------------------------------------------- *
    * INCOME PROFILES
    *
    * Four ways to say what you will earn. All of them are stated in today's
@@ -178,7 +243,7 @@
 
   function predictedSalaries(a) {
     var p = profile();
-    var start = repayStartYear();
+    var start = incomeStartYear();
     var out = {};
     var n = Math.max(p.manualYears || 12, 45);
     var toCash = function (real, i) {
@@ -209,16 +274,42 @@
   function salaries(a) {
     var p = profile();
     var predicted = predictedSalaries(a);
-    if (p.mode !== "manual") return predicted;
+    var out;
 
-    var start = repayStartYear();
-    var out = {};
-    var years = p.manualYears || 12;
-    for (var i = 0; i < years; i++) {
-      var y = start + i;
-      out[y] = p.manual && p.manual[y] != null ? p.manual[y] : Math.round(predicted[y] || 0);
+    if (p.mode !== "manual") {
+      out = predicted;
+    } else {
+      var start = incomeStartYear();
+      out = {};
+      var years = p.manualYears || 12;
+      for (var i = 0; i < years; i++) {
+        var y = start + i;
+        out[y] = p.manual && p.manual[y] != null ? p.manual[y] : Math.round(predicted[y] || 0);
+      }
     }
-    return out;
+
+    // Nothing before work begins, and nothing during a break. The career curve
+    // picks up where it left off rather than restarting, which is closer to
+    // what happens than either extreme.
+    var work = incomeStartYear();
+    var withGaps = {};
+    Object.keys(out).forEach(function (k) {
+      var y = Number(k);
+      withGaps[y] = (y < work || inBreak(p, y)) ? 0 : out[y];
+    });
+
+    // Repayments can fall due before work starts; those years need to exist in
+    // the map as zero, or the line would be carried backwards from the first
+    // salary.
+    var due = repayStartYear();
+    for (var z = due; z < work; z++) if (withGaps[z] == null) withGaps[z] = 0;
+    return withGaps;
+  }
+
+  // Income begins the year work does, which may be well after the course ends.
+  function incomeStartYear() {
+    if (state.loanMode === "balance") return Math.round(num("repayStartYear", 2026));
+    return Math.max(timeline().workStart, E.BASE_TAX_YEAR);
   }
 
   function scenario() {
@@ -243,7 +334,23 @@
     }
 
     if ($("hasPgl").checked) {
-      loans.push({ plan: "pgl", openingBalance: num("pglBalance", 0), repaymentStartYear: start });
+      var t = timeline();
+      if (state.loanMode === "balance") {
+        loans.push({ plan: "pgl", openingBalance: num("pglBalance", 0), repaymentStartYear: start });
+      } else {
+        // Borrowed across the postgraduate course, and repaid from the April
+        // after that course ends — which is later than the undergraduate one.
+        loans.push({
+          plan: "pgl",
+          course: {
+            years: t.pgYears,
+            startYear: t.pgStart,
+            tuitionPerYear: num("pglBalance", 0) / Math.max(1, t.pgYears),
+            maintenancePerYear: 0
+          },
+          repaymentStartYear: t.pgRepayFrom
+        });
+      }
     }
 
     return {
@@ -329,6 +436,7 @@
       bands: [28000, 36000, 44000, 50000, 54000, 56000, 56000, 56000],
       manual: {},
       manualYears: 12,
+      breaks: [],
       plan: "plan5",
       overpay: 0
     };
@@ -344,6 +452,7 @@
     $("overpay").value = s.overpay;
     selectMode(s.mode);
     buildBandRows();
+    buildBreakRows();
     buildSalaryTable();
     syncSliders();
     markCareer();
@@ -355,7 +464,7 @@
       panel.style.setProperty("--live", "var(--s" + tag + ")");
       panel.style.setProperty("--live-g", "var(--s" + tag + "-g)");
     }
-    ["whoIncome", "whoPlan", "whoLog"].forEach(function (id) {
+    ["whoIncome", "whoPlan", "whoLog", "whoBreaks"].forEach(function (id) {
       var el = $(id);
       if (el) { el.textContent = tag; el.style.color = SCEN_META[state.active].colour; }
     });
@@ -1408,7 +1517,25 @@
         "Borrowing <b>" + gbp(perYear) + "</b> a year for <b>" + yrs + " years</b> — <b>" +
         gbp(perYear * yrs) + "</b> in all. With interest running from the first instalment, you owe <b>" +
         gbp(sim.combined.balanceAtRepayStart) + "</b> when repayments begin in April " + start + ".";
-      $("startHint").textContent = "Repayments start in April " + start + ", the first April after the course ends.";
+      var t = timeline();
+      var bits = ["Undergraduate " + t.ugStart + "\u2013" + t.ugEnds];
+      if (t.pg) bits.push("postgraduate " + t.pgStart + "\u2013" + t.pgEnds);
+      bits.push("work from " + t.workStart);
+      var brk = breaksOf(profile());
+      if (brk.length) {
+        bits.push(brk.map(function (b) {
+          return Number(b.from) === Number(b.to) ? "a break in " + b.from : "a break " + b.from + "\u2013" + b.to;
+        }).join(", "));
+      }
+      $("startHint").textContent = bits.join(" \u00b7 ") + ".";
+
+      var gap = t.workStart - defaultWorkStart(t);
+      $("workHint").textContent = gap > 0
+        ? gap + (gap === 1 ? " year" : " years") + " after the course ends. Repayments still fall due from April " +
+          start + ", but nothing is deducted until there is pay to deduct it from."
+        : (gap < 0
+          ? "Before the course ends \u2014 working while studying. No deductions until April " + start + " either way."
+          : "Straight after the course. Repayments fall due from April " + start + ".");
     }
 
     var sal = salaries(a);
@@ -1503,9 +1630,9 @@
    * -------------------------------------------------------------------- */
 
   var FIELDS = ["plan", "courseYears", "startYear", "tuition", "living", "maintenance",
-    "openingBalance", "repayStartYear", "hasPgl", "pglBalance", "career", "startSalary",
-    "salaryGrowth", "birthYear", "overpay", "rpi", "bankBase", "thresholdGrowth",
-    "inflation", "useCap"];
+    "openingBalance", "repayStartYear", "hasPgl", "pglBalance", "pgStartYear", "pgYears",
+    "workStartYear", "career", "startSalary", "salaryGrowth", "birthYear", "overpay",
+    "rpi", "bankBase", "thresholdGrowth", "inflation", "savings", "useCap"];
 
   function save() {
     try {
@@ -1513,7 +1640,8 @@
         loanMode: state.loanMode, incomeMode: state.incomeMode,
         manual: state.manual, manualYears: state.manualYears,
         scen: state.scen, active: state.active, showNoLoan: state.showNoLoan,
-        panelOpen: state.panelOpen
+        panelOpen: state.panelOpen,
+        pgTouched: state.pgTouched, workTouched: state.workTouched
       }, fields: {} };
       FIELDS.forEach(function (id) {
         var el = $(id);
@@ -1543,6 +1671,8 @@
         if (typeof data.state.active === "number") state.active = data.state.active;
         if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
         if (typeof data.state.panelOpen === "boolean") state.panelOpen = data.state.panelOpen;
+        state.pgTouched = !!data.state.pgTouched;
+        state.workTouched = !!data.state.workTouched;
       }
       return true;
     } catch (e) { return false; }
@@ -1637,8 +1767,26 @@
       var b = ev.target.closest(".chip");
       if (!b) return;
       $("courseYears").value = b.dataset.years;
+      followTimeline("courseYears");
       markLength();
-      if (state.incomeMode === "manual") { state.manual = {}; buildSalaryTable(); }
+      state.scen[state.active].manual = {};
+      buildSalaryTable();
+      run();
+    });
+  }
+
+  function buildPgLengthChips() {
+    var host = $("pgLenChips");
+    if (!host) return;
+    host.innerHTML = [1, 2, 3, 4].map(function (n) {
+      return '<button type="button" class="chip" role="radio" aria-checked="false" data-pgyears="' + n + '">' + n + "</button>";
+    }).join("");
+    host.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".chip");
+      if (!b) return;
+      $("pgYears").value = b.dataset.pgyears;
+      followTimeline("pgYears");
+      markLength();
       run();
     });
   }
@@ -1650,6 +1798,14 @@
       b.classList.toggle("is-on", on);
       b.setAttribute("aria-checked", on ? "true" : "false");
     });
+    var pn = String(Math.round(num("pgYears", 1)));
+    if ($("pgLenChips")) {
+      Array.prototype.forEach.call($("pgLenChips").children, function (b) {
+        var on = b.dataset.pgyears === pn;
+        b.classList.toggle("is-on", on);
+        b.setAttribute("aria-checked", on ? "true" : "false");
+      });
+    }
   }
 
   /* ---------------------------------------------------------------------- *
@@ -1732,6 +1888,17 @@
         run();
         return;
       }
+      if (t.dataset && t.dataset.brk != null) {
+        var bi = Number(t.dataset.brk), bv = parseInt(t.value, 10);
+        if (isFinite(bv)) {
+          p.breaks[bi][t.dataset.end] = bv;
+          // A break that ends before it starts is a typo, not an instruction.
+          if (t.dataset.end === "from" && p.breaks[bi].to < bv) p.breaks[bi].to = bv;
+          if (t.dataset.end === "to" && bv < p.breaks[bi].from) p.breaks[bi].from = bv;
+        }
+        run();
+        return;
+      }
       if (t.dataset && t.dataset.band != null) {
         var bv = parseFloat(t.value);
         p.bands[Number(t.dataset.band)] = isFinite(bv) ? Math.max(0, bv) : 0;
@@ -1752,9 +1919,14 @@
         var l = LIVING.filter(function (x) { return x.id === t.value; })[0];
         if (l) $("maintenance").value = l.max;
       }
-      if (t.id === "hasPgl") $("pglRow").hidden = !t.checked;
+      if (t.id === "hasPgl") { $("pglRow").hidden = !t.checked; followTimeline("hasPgl"); }
+      if (t.id === "pgStartYear") state.pgTouched = true;
+      if (t.id === "workStartYear") state.workTouched = true;
       if (t.id === "birthYear") buildSalaryTable();
-      if (t.id === "startYear" || t.id === "repayStartYear") {
+      if (t.id === "startYear" || t.id === "courseYears" || t.id === "pgStartYear" || t.id === "pgYears") {
+        followTimeline(t.id);
+      }
+      if (t.id === "startYear" || t.id === "repayStartYear" || t.id === "workStartYear") {
         state.scen[state.active].manual = {};
         buildSalaryTable();
       }
@@ -1811,6 +1983,22 @@
       save();
     });
 
+    $("addBreak").addEventListener("click", function () {
+      var p = state.scen[state.active];
+      if (!Array.isArray(p.breaks)) p.breaks = [];
+      var from = Math.max(incomeStartYear() + 1, (p.breaks.length ? Number(p.breaks[p.breaks.length - 1].to) + 2 : incomeStartYear() + 3));
+      p.breaks.push({ from: from, to: from });
+      buildBreakRows(); run();
+    });
+
+    $("breakRows").addEventListener("click", function (ev) {
+      var drop = ev.target.closest("[data-drop]");
+      if (!drop) return;
+      var p = state.scen[state.active];
+      p.breaks.splice(Number(drop.dataset.drop), 1);
+      buildBreakRows(); run();
+    });
+
     $("showNoLoan").addEventListener("change", function () {
       state.showNoLoan = $("showNoLoan").checked;
       run();
@@ -1825,6 +2013,22 @@
     });
 
     $("form").addEventListener("submit", function (ev) { ev.preventDefault(); });
+  }
+
+  // Moving the undergraduate course should drag the dates that hang off it,
+  // unless the reader has deliberately placed them somewhere else.
+  function followTimeline(changed) {
+    var t = timeline();
+    if (changed === "startYear" || changed === "courseYears" || changed === "hasPgl") {
+      if (!state.pgTouched) $("pgStartYear").value = t.ugEnds;
+    }
+    // Even a hand-placed one cannot start before the degree it follows.
+    if ($("hasPgl").checked && num("pgStartYear", t.ugEnds) < t.ugEnds) {
+      $("pgStartYear").value = t.ugEnds;
+    }
+    var t2 = timeline();
+    if (!state.workTouched) $("workStartYear").value = defaultWorkStart(t2);
+    syncSliders();
   }
 
   function applyPanel() {
@@ -1845,6 +2049,7 @@
     fillRulesTable();
     buildCareerCards();
     buildLengthChips();
+    buildPgLengthChips();
     buildScenTabs();
     state.scen = [0,1,2,3,4].map(blankScenario);
     var restored = restore();
@@ -1865,6 +2070,9 @@
     markScens();
     markCareer();
     markLength();
+    if (!state.workTouched) $("workStartYear").value = defaultWorkStart(timeline());
+    if (!state.pgTouched) $("pgStartYear").value = timeline().ugEnds;
+    syncSliders();
     wire();
     run();
   }

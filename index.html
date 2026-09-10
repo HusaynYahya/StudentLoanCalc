@@ -6,7 +6,7 @@
 <meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
 <meta name="color-scheme" content="dark" />
 <title>Student loan · repayment model</title>
-<link rel="stylesheet" href="loan.css?v=96999a30" />
+<link rel="stylesheet" href="loan.css?v=9e3b0280" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -92,34 +92,57 @@
         <p class="readout" id="predictSummary"></p>
       </section>
 
-      <!-- ---- loan ---- -->
+      <!-- ---- timeline ---- -->
       <section class="grp">
         <div class="grp__head">
-          <h2>Plan <b class="who" id="whoPlan">A</b></h2>
+          <h2>Timeline</h2>
           <div class="seg" role="tablist" aria-label="How to describe the loan">
             <button type="button" role="tab" id="tab-course" aria-controls="pane-course" aria-selected="true" data-tab="course">Course</button>
             <button type="button" role="tab" id="tab-balance" aria-controls="pane-balance" aria-selected="false" data-tab="balance">Balance</button>
           </div>
         </div>
 
-        <div class="ctl">
-          <div class="ctl__top"><label for="plan">Plan</label></div>
-          <select id="plan"></select>
-          <p class="note" id="planBlurb"></p>
-        </div>
-
         <div class="pane" id="pane-course" role="tabpanel" aria-labelledby="tab-course">
           <div class="ctl">
-            <div class="ctl__top"><label id="lenLabel">Length</label></div>
+            <div class="ctl__top">
+              <label for="startYear">Undergraduate starts</label>
+              <span class="ctl__val"><input type="number" id="startYear" min="2000" max="2040" step="1" value="2026" data-slider="2015,2035,1" /></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top"><label id="lenLabel">…for</label></div>
             <div class="chips" role="radiogroup" aria-labelledby="lenLabel" id="lenChips"></div>
             <input type="hidden" id="courseYears" value="3" />
           </div>
 
+          <label class="check"><input type="checkbox" id="hasPgl" /> <span>Postgraduate degree too</span></label>
+          <div id="pglRow" hidden>
+            <div class="ctl">
+              <div class="ctl__top">
+                <label for="pgStartYear">Postgraduate starts</label>
+                <span class="ctl__val"><input type="number" id="pgStartYear" min="2000" max="2050" step="1" value="2029" data-slider="2018,2045,1" /></span>
+              </div>
+            </div>
+            <div class="ctl">
+              <div class="ctl__top"><label id="pgLenLabel">…for</label></div>
+              <div class="chips" role="radiogroup" aria-labelledby="pgLenLabel" id="pgLenChips"></div>
+              <input type="hidden" id="pgYears" value="1" />
+            </div>
+            <div class="ctl">
+              <div class="ctl__top">
+                <label for="pglBalance">Postgraduate borrowed</label>
+                <span class="ctl__val"><i>£</i><input type="number" id="pglBalance" min="0" max="60000" step="100" value="12471" data-slider="0,30000,100" /></span>
+              </div>
+              <p class="note">6% above £21,000, from the April after the postgraduate course ends.</p>
+            </div>
+          </div>
+
           <div class="ctl">
             <div class="ctl__top">
-              <label for="startYear">Starts September</label>
-              <span class="ctl__val"><input type="number" id="startYear" min="2015" max="2040" step="1" value="2026" data-slider="2020,2035,1" /></span>
+              <label for="workStartYear">Starts work</label>
+              <span class="ctl__val"><input type="number" id="workStartYear" min="2000" max="2060" step="1" value="2029" data-slider="2018,2050,1" /></span>
             </div>
+            <p class="note" id="workHint"></p>
           </div>
 
           <div class="ctl">
@@ -128,7 +151,6 @@
               <span class="ctl__val"><i>£</i><input type="number" id="tuition" min="0" max="30000" step="10" value="9790" data-slider="0,12000,10" /></span>
             </div>
           </div>
-
           <div class="ctl">
             <div class="ctl__top">
               <label for="maintenance">Maintenance a year</label>
@@ -156,23 +178,25 @@
             <p class="note">What the write-off clock counts from.</p>
           </div>
         </div>
+
+        <div class="ctl">
+          <div class="ctl__top"><label>Plan</label></div>
+          <select id="plan"></select>
+          <p class="note" id="planBlurb"></p>
+        </div>
+      </section>
+
+      <!-- ---- breaks ---- -->
+      <section class="grp">
+        <div class="grp__head"><h2>Breaks <b class="who" id="whoBreaks">A</b></h2></div>
+        <p class="note">Years with no income — a year out, caring, illness, redundancy, further study. Each profile has its own.</p>
+        <div class="breaks" id="breakRows"></div>
+        <div class="btnrow"><button type="button" class="btn" id="addBreak">+ Add a break</button></div>
       </section>
 
       <!-- ---- extras ---- -->
       <section class="grp">
         <div class="grp__head"><h2>Also</h2></div>
-
-        <label class="check"><input type="checkbox" id="hasPgl" /> <span>Postgraduate loan too</span></label>
-        <div id="pglRow" hidden>
-          <div class="ctl">
-            <div class="ctl__top">
-              <label for="pglBalance">Postgraduate borrowed</label>
-              <span class="ctl__val"><i>£</i><input type="number" id="pglBalance" min="0" max="60000" step="100" value="12471" data-slider="0,30000,100" /></span>
-            </div>
-            <p class="note">6% above £21,000, alongside the undergraduate plan.</p>
-          </div>
-        </div>
-
         <div class="ctl">
           <div class="ctl__top">
             <label for="overpay">Overpay a month</label>
@@ -180,7 +204,6 @@
           </div>
           <p class="note">Test it first. It often buys nothing.</p>
         </div>
-
         <div class="ctl">
           <div class="ctl__top">
             <label for="birthYear">Born <span class="opt">optional</span></label>
@@ -401,7 +424,7 @@
   </main>
 </div>
 
-<script src="engine.js?v=96999a30"></script>
-<script src="loan.js?v=96999a30" defer></script>
+<script src="engine.js?v=9e3b0280"></script>
+<script src="loan.js?v=9e3b0280" defer></script>
 </body>
 </html>
