@@ -406,7 +406,7 @@
 
     if (p.mode === "bands") {                 // the drawn curve
       var pts = pointsOf(p);
-      for (var b = 0; b < n; b++) out[start + b] = toCash(drawnSalary(pts, b + 1), b);
+      for (var b = 0; b < n; b++) out[start + b] = toCash(drawnSalary(pts, b), b);
       return out;
     }
 
@@ -624,7 +624,7 @@
     if (!Array.isArray(p.points)) {
       // Carry over a profile saved when this was eight five-year bands.
       p.points = Array.isArray(p.bands) && p.bands.length
-        ? p.bands.map(function (v, i) { return { t: i * 5 + 1, v: Number(v) || 0 }; })
+        ? p.bands.map(function (v, i) { return { t: i * 5, v: Number(v) || 0 }; })
         : defaultPoints();
     }
     return p.points.slice().sort(function (a, b) { return a.t - b.t; });
@@ -650,7 +650,7 @@
   var DRAW = { W: 300, H: 190, ml: 34, mr: 8, mt: 10, mb: 20 };
 
   function drawX(t) {
-    return DRAW.ml + ((t - 1) / (DRAW_YEARS - 1)) * (DRAW.W - DRAW.ml - DRAW.mr);
+    return DRAW.ml + (t / DRAW_YEARS) * (DRAW.W - DRAW.ml - DRAW.mr);
   }
   function drawY(v) {
     return DRAW.mt + (1 - v / DRAW_MAX) * (DRAW.H - DRAW.mt - DRAW.mb);
@@ -665,29 +665,40 @@
     // Two weights of line. The labelled ones carry the scale; the fainter
     // ones between them let a point be read to something nearer than the
     // nearest fifty thousand, without a wall of numbers down the side.
+    // A full grid in two weights. --line-2 is the brighter of the two tokens,
+    // so the labelled lines take it and the ones between them take --line —
+    // which had them the wrong way round, the minor grid reading heavier
+    // than the scale it was subdividing.
     var grid = "";
+    var x0 = DRAW.ml, x1 = DRAW.W - DRAW.mr;
+    var y0 = DRAW.mt, y1 = DRAW.H - DRAW.mb;
+    var rule = function (a, b, c, d, major) {
+      return '<line x1="' + a + '" y1="' + b + '" x2="' + c + '" y2="' + d +
+        '" stroke="var(' + (major ? "--line-2" : "--line") + ')" stroke-width="' +
+        (major ? 1.25 : 0.75) + '"/>';
+    };
+
     var step = DRAW_MAX > 160000 ? 50000 : 25000;   // labelled
     var fine = step / 5;                            // drawn, not labelled
     for (var v = 0; v <= DRAW_MAX + 1; v += fine) {
       var major = Math.abs(v % step) < 1;
-      grid += '<line x1="' + DRAW.ml + '" y1="' + drawY(v).toFixed(1) + '" x2="' + (DRAW.W - DRAW.mr) +
-        '" y2="' + drawY(v).toFixed(1) + '" stroke="var(--line' + (major ? "" : "-2") +
-        ')" stroke-width="' + (major ? 1 : 0.5) + '"/>';
+      var gy = drawY(v).toFixed(1);
+      grid += rule(x0, gy, x1, gy, major);
       if (major) {
         grid += '<text x="' + (DRAW.ml - 5) + '" y="' + (drawY(v) + 3.5).toFixed(1) +
           '" text-anchor="end" font-size="8.5" fill="var(--ink-4)">' + gbpShort(v) + "</text>";
       }
     }
-    // Years the same way: a tick every other year, a label every ten.
-    var y0 = DRAW.mt, y1 = DRAW.H - DRAW.mb;
-    for (var t = 1; t <= DRAW_YEARS; t += 2) {
-      var lab = (t - 1) % 10 === 0;
-      grid += '<line x1="' + drawX(t).toFixed(1) + '" y1="' + (lab ? y0 : y1 - 4) +
-        '" x2="' + drawX(t).toFixed(1) + '" y2="' + y1 +
-        '" stroke="var(--line' + (lab ? "" : "-2") + ')" stroke-width="' + (lab ? 1 : 0.5) + '"/>';
+    for (var t = 0; t <= DRAW_YEARS; t += 2) {
+      var lab = t % 10 === 0;
+      var gx = drawX(t).toFixed(1);
+      grid += rule(gx, y0, gx, y1, lab);
       if (lab) {
-        grid += '<text x="' + drawX(t).toFixed(1) + '" y="' + (DRAW.H - 6) +
-          '" text-anchor="middle" font-size="8.5" fill="var(--ink-4)">yr ' + t + "</text>";
+        // The last label would hang off the right edge if it were centred.
+        var end = t === DRAW_YEARS;
+        grid += '<text x="' + (end ? x1 : gx) + '" y="' + (DRAW.H - 6) +
+          '" text-anchor="' + (end ? "end" : "middle") +
+          '" font-size="8.5" fill="var(--ink-4)">yr ' + t + "</text>";
       }
     }
 
@@ -697,7 +708,7 @@
         return (i ? "L" : "M") + drawX(q.t).toFixed(1) + " " + drawY(q.v).toFixed(1);
       }).join(" ");
       // Flat runs either side, so the curve reads as what it actually models.
-      lead = "M" + drawX(1).toFixed(1) + " " + drawY(pts[0].v).toFixed(1) +
+      lead = "M" + drawX(0).toFixed(1) + " " + drawY(pts[0].v).toFixed(1) +
              "L" + drawX(pts[0].t).toFixed(1) + " " + drawY(pts[0].v).toFixed(1);
       tail = "M" + drawX(pts[pts.length - 1].t).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1) +
              "L" + drawX(DRAW_YEARS).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1);
@@ -721,7 +732,8 @@
 
     var held = dpDrag && dpDrag.pt;
     $("drawNote").innerHTML = held
-      ? "Year <b>" + held.t + "</b> of your career \u2014 <b>" + gbp(held.v) + "</b> a year, in " + E.taxYearLabel(E.BASE_TAX_YEAR) + " money."
+      ? (held.t === 0 ? "The year you start work" : "Year <b>" + held.t + "</b> of your career") +
+        " \u2014 <b>" + gbp(held.v) + "</b> a year, in " + E.taxYearLabel(E.BASE_TAX_YEAR) + " money."
       : pts.length
         ? pts.length + (pts.length === 1 ? " point" : " points") +
           ". Click to add one, drag to move it, click it twice to take it away " +
@@ -735,9 +747,9 @@
     var rect = svg.getBoundingClientRect();
     var sx = (ev.clientX - rect.left) / rect.width * DRAW.W;
     var sy = (ev.clientY - rect.top) / rect.height * DRAW.H;
-    var t = Math.round(1 + (sx - DRAW.ml) / (DRAW.W - DRAW.ml - DRAW.mr) * (DRAW_YEARS - 1));
+    var t = Math.round((sx - DRAW.ml) / (DRAW.W - DRAW.ml - DRAW.mr) * DRAW_YEARS);
     var v = (1 - (sy - DRAW.mt) / (DRAW.H - DRAW.mt - DRAW.mb)) * DRAW_MAX;
-    return { t: clamp(t, 1, DRAW_YEARS), v: Math.max(0, Math.round(v / 250) * 250) };
+    return { t: clamp(t, 0, DRAW_YEARS), v: Math.max(0, Math.round(v / 250) * 250) };
   }
 
   var dpDrag = null, dpLast = null;
@@ -2758,6 +2770,10 @@
     if (!Array.isArray(out.points)) out.points = null;
     else out.points = out.points.filter(function (q) {
       return q && isFinite(q.t) && isFinite(q.v);
+    }).map(function (q) {
+      // The axis used to start at year 1. A point saved then means the same
+      // year it always did, one further along a scale that now starts at 0.
+      return { t: clamp(Math.round(q.t), 0, DRAW_YEARS), v: q.v };
     });
     ["startSalary", "growth", "overpay", "manualYears"].forEach(function (k) {
       if (!isFinite(Number(out[k]))) out[k] = blank[k];
