@@ -1374,7 +1374,12 @@
           '<td class="n lead">' + gbp(c.fv) + "</td>" +
           '<td class="n gap">' + (i === 0 ? "cheapest" : "+" + gbp(gap)) + "</td></tr>";
       }).join("") +
-      "</tbody></table></div></div>";
+      "</tbody></table></div>" +
+      '<p class="choices__now">' + (atStart
+        ? "Clearing the whole balance takes <b>" + gbp(o.lump) + "</b> \u2014 what will be owed by " +
+          E.taxYearLabel(repayStartYear()) + ", once the last instalment is drawn and the interest " +
+          "accrued through the course has run. On <b>" + gbp(r.borrowed) + "</b> borrowed."
+        : "Clearing the whole balance right now takes <b>" + gbp(o.lump) + "</b>.") + "</p></div>";
 
     $("focusGrid").innerHTML = groups.map(function (g) {
       return '<div class="fgroup"><h4>' + g.name + "</h4><dl>" + g.rows.filter(function (row) {
@@ -1392,7 +1397,6 @@
     $("recBox").className = "rec" + (rec ? " is-" + rec.tone : " is-empty");
 
     renderOppChart(sim);
-    renderSettleChart(sim);
 
     $("oppVerdict").innerHTML = o.years === 0
       ? "Nothing is ever deducted on this profile, so there is nothing to weigh against saving."
@@ -1410,74 +1414,6 @@
             ? "repaying as required" : (owing ? "clearing it today" : "paying the fees in cash");
           return cash + priced + " — so the cheaper of the two is <b>" + better + "</b>.";
         })();
-  }
-
-  /* ---- when, if ever, is it worth settling? ------------------------------- *
-   * Every year is its own option, and they do not cost the same: settle early
-   * and you hand over a large balance but escape all the deductions after it;
-   * settle late and you have paid most of it anyway. The curve usually dips
-   * somewhere in the middle — or slopes away entirely, on a loan that is going
-   * to be written off.
-   * ---------------------------------------------------------------------- */
-
-  function renderSettleChart(sim) {
-    var st = sim.settle;
-    var host = $("settleChart");
-    if (!host) return;
-    if (!st || st.years.length < 3) { host.innerHTML = ""; $("settleKey").innerHTML = ""; return; }
-
-    var pts = st.years.filter(function (c) { return c.taxYear != null; })
-      .map(function (c) { return { taxYear: c.taxYear, label: c.label, v: c.cost }; });
-    var never = st.never;
-
-    var max = Math.max(never, pts.reduce(function (m, p) { return Math.max(m, p.v); }, 0));
-    var s = niceScale(max);
-    var f = frame({ years: pts, xMin: pts[0].taxYear, xMax: pts[pts.length - 1].taxYear,
-                    top: s.top, step: s.step, fmt: gbpShort, w: 760, h: 250,
-                    title: "What it costs to settle the balance in each year" });
-
-    // Never settling is a flat reference: the repayment stream and nothing else.
-    var neverLine = '<line x1="' + f.ml + '" y1="' + f.y(never).toFixed(1) + '" x2="' + (f.W - 14) +
-      '" y2="' + f.y(never).toFixed(1) + '" stroke="var(--ink-3)" stroke-width="1.75" stroke-dasharray="5 4"/>' +
-      '<text x="' + (f.W - 18) + '" y="' + (f.y(never) - 8).toFixed(1) +
-      '" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink-3)">Never settle \u2014 ' +
-      gbp(never) + "</text>";
-
-    var best = st.best;
-    var mark = "";
-    if (best && best.taxYear != null) {
-      mark = '<circle cx="' + f.x(best.taxYear).toFixed(1) + '" cy="' + f.y(best.cost).toFixed(1) +
-        '" r="4.5" fill="var(--good)"/>' +
-        '<text x="' + f.x(best.taxYear).toFixed(1) + '" y="' + (f.y(best.cost) - 12).toFixed(1) +
-        '" text-anchor="middle" font-size="11" font-weight="600" fill="var(--good)">cheapest \u00b7 ' +
-        best.label + "</text>";
-    }
-
-    $("settleChart").innerHTML = f.open +
-      '<path d="' + line(pts, f) + '" fill="none" stroke="var(--warn)" stroke-width="2.25"/>' +
-      neverLine + mark + f.close;
-
-    var first = pts[0];
-    $("settleKey").innerHTML =
-      '<i class="k-int">Cost of settling that year, in ' + E.taxYearLabel(sim.combined.years[0].taxYear) + " money</i>" +
-      '<i style="color:var(--ink-3)">Never settling</i>' +
-      '<i style="color:var(--ink-4)">settling in ' + first.label + " costs " + gbp(first.cost) + "</i>";
-
-    var wipedOut = sim.combined.writtenOff || 0;
-    $("settleNote").innerHTML = (best && best.taxYear == null)
-      ? "There is no good year to settle this one. " + (wipedOut > 0
-          ? "Every year costs more than letting the deductions run, because <b>" + gbp(wipedOut) +
-            "</b> of it is written off in " + sim.combined.writeOffLabel +
-            " and settling buys out a debt you were never going to pay."
-          : "The loan clears on its own, and money handed over early earns " + pct(sim.assumptions.savings) +
-            " elsewhere for longer than it saves in interest \u2014 so every year of settling costs more " +
-            "than simply letting the deductions run.")
-      : (best
-        ? "The cheapest moment to clear it is <b>" + best.label + "</b>, when the balance stands at <b>" +
-          gbp(best.balance) + "</b>. Settling then costs <b>" + gbp(best.cost) + "</b> against <b>" +
-          gbp(never) + "</b> for letting the deductions run \u2014 a difference of <b>" +
-          gbp(Math.abs(never - best.cost)) + "</b>."
-        : "");
   }
 
   /* ---- the two choices, racing --------------------------------------------

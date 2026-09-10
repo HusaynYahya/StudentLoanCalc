@@ -549,63 +549,6 @@ test("someone who never repays has nothing to weigh up", function () {
   ok(!o.clearingIsBetter, "and clearing a balance that would be written off is never better");
 });
 
-/* -- Settling early ------------------------------------------------------- */
-
-console.log("\nWhat it costs to settle, year by year");
-
-test("settling in the first year is just the balance, discounted", function () {
-  var s = E.simulate({
-    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
-    salaries: { 2030: 45000 }
-  });
-  var first = s.settle.years[0];
-  near(first.balance, s.combined.balanceAtRepayStart, 1, "nothing has been repaid yet");
-  near(first.cost, s.opportunity.pvLump, 1, "so the cost is the lump, discounted");
-});
-
-test("never settling costs exactly the repayment stream", function () {
-  var s = E.simulate({
-    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
-    salaries: { 2030: 45000 }
-  });
-  near(s.settle.never, s.opportunity.pvRepayments, 1, "the two are the same thing");
-  eq(s.settle.years[s.settle.years.length - 1].label, "never settle", "and it is the last option listed");
-});
-
-test("a loan heading for write-off is never worth settling", function () {
-  var s = E.simulate({
-    loans: [{ plan: "plan5", openingBalance: 60000, repaymentStartYear: 2030 }],
-    salaries: { 2030: 22000 },
-    assumptions: { salaryGrowth: 0.01 }
-  });
-  ok(!s.combined.everRepaidInFull, "it is written off");
-  eq(s.settle.best.label, "never settle", "so the cheapest course is to do nothing");
-});
-
-test("every year is priced, and the cheapest is one of them", function () {
-  var s = E.simulate({
-    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
-    salaries: { 2030: 60000 }
-  });
-  var repaying = s.combined.years.filter(function (y) { return y.phase === "repaying"; });
-  eq(s.settle.years.length, repaying.length + 1, "one row a year, plus never");
-  var costs = s.settle.years.map(function (c) { return c.cost; });
-  near(s.settle.best.cost, Math.min.apply(null, costs), 0.01, "the best really is the cheapest");
-});
-
-test("a higher savings rate pushes the cheapest year later", function () {
-  var mk = function (sv) {
-    return E.simulate({
-      loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
-      salaries: { 2030: 60000 },
-      assumptions: { savings: sv }
-    }).settle.best;
-  };
-  var cheap = mk(0.01), dear = mk(0.09);
-  var idx = function (b) { return b.taxYear == null ? Infinity : b.taxYear; };
-  ok(idx(dear) >= idx(cheap), "money that earns more is worth holding onto longer");
-});
-
 /* -- Sanity -------------------------------------------------------------- */
 
 console.log("\nSanity");

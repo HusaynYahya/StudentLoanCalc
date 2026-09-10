@@ -678,3 +678,9 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .tl-handle:hover circle, .tl-handle:focus-visible circle { r: 6; }
 .tl-handle:focus-visible { outline: none; }
 .tl-handle:focus-visible line { stroke-width: 3; }
+
+.choices__now {
+  margin: .9rem 0 0; font-size: .8rem; line-height: 1.6; color: var(--ink-3);
+  padding-top: .8rem; border-top: 1px solid var(--line); max-width: 78ch;
+}
+.choices__now b { color: var(--ink); font-family: var(--num); font-weight: 600; }
