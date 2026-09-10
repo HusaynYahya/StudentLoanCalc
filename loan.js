@@ -95,10 +95,10 @@
     active: 0,               // which one the controls are editing
     showNoLoan: true,        // the life where you never borrowed
     loanMode: "course",      // "course" | "balance"
-    incomeMode: "predict",   // "predict" | "manual"
     basis: "cash",           // "cash" | "real"
-    manual: {},              // tax year → salary, once the user has edited
-    manualYears: 12,
+    // incomeMode, manual and manualYears used to live here too, and were
+    // saved and restored faithfully. Nothing read them: every consumer
+    // takes the mode, the typed years and their count off the profile.
     hideZeros: false,
     openYears: {}
   };
@@ -284,7 +284,10 @@
     if (g.id === "ug") {
       if (g.edge === "l") {
         var to = g.orig.to;
-        var from = clamp(g.orig.from + d, 2000, to - TL_MIN);
+        // Both edges bound the course to the same 1–8 years. Only the right
+        // one used to, so pulling the left grip far enough gave a 29-year
+        // degree and a headline in 2000/01 money.
+        var from = clamp(g.orig.from + d, to - 8, to - TL_MIN);
         set("startYear", from); set("courseYears", to - from);
       } else if (g.edge === "r") {
         set("courseYears", clamp(g.orig.to + d - g.orig.from, TL_MIN, 8));
@@ -296,7 +299,7 @@
       state.pgTouched = true;
       if (g.edge === "l") {
         var pto = g.orig.to;
-        var pfrom = clamp(g.orig.from + d, t.ugEnds, pto - TL_MIN);
+        var pfrom = clamp(g.orig.from + d, Math.max(t.ugEnds, pto - 6), pto - TL_MIN);
         set("pgStartYear", pfrom); set("pgYears", pto - pfrom);
       } else if (g.edge === "r") {
         set("pgYears", clamp(g.orig.to + d - g.orig.from, TL_MIN, 6));
@@ -513,6 +516,24 @@
      be looking; a year says which one, and does not quietly go stale. */
   /* Two labels sit in the markup and cannot be written until the model has
      said which year it is reckoning in. */
+  // Both of these are state the page can be reloaded into, so both need
+  // saying in one place rather than only inside the handler that changed it.
+  function markBasis() {
+    document.querySelectorAll("[data-basis]").forEach(function (o) {
+      o.classList.toggle("on", o.dataset.basis === state.basis);
+      o.setAttribute("aria-pressed", o.dataset.basis === state.basis ? "true" : "false");
+    });
+  }
+
+  function markZeros() {
+    var b = $("toggleZeros");
+    if (!b) return;
+    // The markup said one thing and the handler another, so the label
+    // changed the first time it was pressed and never came back.
+    b.textContent = state.hideZeros ? "Show every year" : "Hide empty years";
+    b.setAttribute("aria-pressed", state.hideZeros ? "true" : "false");
+  }
+
   function nameTheYears() {
     var owed = document.querySelector('label[for="openingBalance"]');
     if (owed) owed.textContent = "Owed in " + nowLabel();
@@ -560,7 +581,13 @@
     if (!tlGrab) renderTimelineTrack();   // not while a block is under the pointer
 
     var runs;
-    try { runs = runAll(); } catch (e) { return; }
+    try { runs = runAll(); }
+    catch (e) {
+      // Silently returning froze the page on stale charts with no signal at
+      // all — the perfect hiding place for a future engine regression.
+      if (window.console && console.error) console.error("run failed:", e);
+      return;
+    }
     if (!runs.length) return;
 
     lastRuns = runs;
@@ -1126,7 +1153,7 @@
     var pad = (hi - lo) * 0.08 || 1000;
     lo = Math.max(0, lo - pad); hi = hi + pad;
 
-    var W = 760, rowH = 54, padT = 28, labelW = 168, right = 18;
+    var W = vizW("sensChart", 260, 760), rowH = 54, padT = 28, labelW = 168, right = 18;
     var iw = W - labelW - right;
     var H = padT + bars.length * rowH + 26;
     var x = function (v) { return labelW + ((v - lo) / (hi - lo)) * iw; };
@@ -1307,7 +1334,7 @@
   function renderSalaryChart(runs) {
     var series = runs.map(function (sim) {
       var ys = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
-      return { meta: sim.meta,
+      return { meta: sim.meta, plan: sim.settings.plan,
         pts: ys.map(function (y) { return { taxYear: y.taxYear, label: y.label, v: scaled(y, y.salary) }; }),
         thr: ys.map(function (y) { return { taxYear: y.taxYear, label: y.label, v: scaled(y, y.threshold || 0) }; }) };
     });
@@ -1326,12 +1353,21 @@
         '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour + '" stroke-width="2"/>';
     }).join("");
 
-    // One threshold line: it is the same law for everyone on the same plan.
-    var thrLine = '<path d="' + line(series[0].thr, f) +
-      '" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="5 3"/>';
+    // One line per distinct plan. The comment here used to say it was the
+    // same law for everyone, which is true only while everyone is on the
+    // same plan — and the plan is per profile.
+    var seenPlan = {}, thrLine = "", thrKeys = [];
+    series.forEach(function (S) {
+      if (!S.plan || seenPlan[S.plan] || !S.thr.length) return;
+      seenPlan[S.plan] = true;
+      thrLine += '<path d="' + line(S.thr, f) +
+        '" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="5 3"/>';
+      thrKeys.push(E.RULES[S.plan].label);
+    });
 
     $("salaryChart").innerHTML = f.open + body + thrLine + f.close;
-    $("salaryKey").innerHTML = runKeys(runs) + '<i class="k-int">Threshold</i>';
+    $("salaryKey").innerHTML = runKeys(runs) +
+      '<i class="k-int">Threshold' + (thrKeys.length > 1 ? ", " + thrKeys.join(" and ") : "") + "</i>";
   }
 
   /* ---- 3. what leaves your pay each month ------------------------------- */
@@ -1370,7 +1406,7 @@
     var total = r.borrowed + r.totalInterest;
     if (!(total > 0)) { $("flowChart").innerHTML = ""; $("flowKey").innerHTML = ""; return; }
 
-    var W = 760, H = 200, ml = 10, iw = W - 20, barH = 46, gap = 26, top = 30;
+    var W = vizW("flowChart", 200, 760, 200), H = 200, ml = 10, iw = W - 20, barH = 46, gap = 26, top = 30;
     var bar = function (yPos, segs) {
       var xc = ml, out = "";
       segs.forEach(function (s) {
@@ -1469,7 +1505,7 @@
     }
 
     var max = Math.max.apply(null, rows.map(function (r) { return r.value; })) || 1;
-    var rowH = 46, padT = 8, W = 760, labelW = 238, barW = W - labelW - 132;
+    var rowH = 46, padT = 8, W = vizW("barsChart", 160, 760, 160), labelW = 238, barW = W - labelW - 132;
     var H = padT * 2 + rows.length * rowH;
 
     var body = rows.map(function (r, i) {
@@ -1547,9 +1583,12 @@
     var spread = worst.fv - best.fv;
     var margin = best.fv > 0 ? spread / best.fv : 0;
 
-    var flip = o.breakEven != null
-      ? " The two swap places at a savings return of <b>" + pct(o.breakEven) +
-        "</b>: below that, settling it outright wins; above it, keeping the money does."
+    // Quote the crossover for the two options the table actually shows.
+    var be = atStartRec ? o.breakEvenUpfront : o.breakEven;
+    var flip = be != null
+      ? " The two swap places at a savings return of <b>" + pct(be) + "</b>: below that, " +
+        (atStartRec ? "paying the fees in cash" : "settling it outright") +
+        " wins; above it, keeping the money does."
       : "";
 
     // Under a twentieth apart is not a difference anyone should act on.
@@ -1596,7 +1635,7 @@
         tone: ""
       },
       {
-        k: "In " + baseYear + " money",
+        k: "At " + baseYear + " prices",
         x: "totalRealRepaid",
         v: gbp(r.totalRealRepaid),
         sub: "value of the repayments, adjusted for inflation to " + baseYear + " value, at " +
@@ -1616,7 +1655,7 @@
         tone: "warm"
       },
       {
-        k: "…and in " + baseYear + " money",
+        k: "…at " + baseYear + " prices",
         x: "realFvUpfront",
         v: gbp(o.realFvUpfront),
         sub: o.upfrontPaid > 0
@@ -1730,7 +1769,7 @@
     var r = sim.combined, base = r.years.length ? r.years[0].label : nowLabel();
     var a = sim.assumptions;
     return {
-      title: "Total repayment, in " + base + " money",
+      title: "Total repayment, at " + base + " prices",
       what: "The same repayments, each one shrunk to what it would buy in " + base + ". This is the figure to compare against a price you know today.",
       how: [
         "Each year's repayment is divided by " + pct(a.inflation) + " compounded over the years between " +
@@ -1764,7 +1803,7 @@
     var o = sim.opportunity, r = sim.combined;
     var base = r.years.length ? r.years[0].label : nowLabel();
     return {
-      title: "The saved pot, in " + base + " money",
+      title: "The saved pot, at " + base + " prices",
       what: "The same pot, shrunk to what it would buy in " + base + ". Set this against the repayments in " + base + " money to see which way the trade falls.",
       how: [
         "The pot of " + pounds(o.fvUpfront) + " is divided by " + pct(sim.assumptions.inflation) +
@@ -2033,7 +2072,14 @@
 
     var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
     var firstPaid = repaying.filter(function (y) { return y.monthlyRepayment > 0; })[0];
-    var peak = repaying.reduce(function (m, y) { return Math.max(m, y.monthlyRepayment); }, 0);
+    // The largest deduction, taken from the months themselves. A year's
+    // figure is its average, so a final year of eight months at £787 and one
+    // at £566 averaged to £762 — and the card reported a peak £25 below the
+    // largest deduction printed in its own log.
+    var mm = mergedMonths(sim);
+    var peak = Object.keys(mm).reduce(function (m, k) {
+      return Math.max(m, mm[k].payment || 0);
+    }, 0);
 
     // All three lives priced at the year the loan ends, so they can be
     // compared without the timing doing the arguing.
@@ -2055,7 +2101,7 @@
         hide: Math.abs(peakBalance - r.balanceAtRepayStart) < 1 },
 
       { g: "What you pay", k: "Handed over, in cash", v: tag("totalRepaid", gbp(r.totalRepaid)), c: "good" },
-      { g: "What you pay", k: "Handed over, in " + baseLabel + " money", v: tag("totalRealRepaid", gbp(r.totalRealRepaid)), c: "good" },
+      { g: "What you pay", k: "Handed over, at " + baseLabel + " prices", v: tag("totalRealRepaid", gbp(r.totalRealRepaid)), c: "good" },
       { g: "What you pay", k: "First deduction", v: tag("firstDeduction", firstPaid ? gbp(firstPaid.monthlyRepayment) + " a month" : "never") },
       { g: "What you pay", k: "Peak deduction", v: gbp(peak) + " a month",
         hide: !firstPaid || Math.abs(peak - firstPaid.monthlyRepayment) < 1 },
@@ -2113,7 +2159,7 @@
       "rather than in money of three different decades.</p>" +
       '<div class="scroll"><table class="choices"><thead><tr><th scope="col">Option</th>' +
       '<th scope="col" class="n">You pay</th>' +
-      '<th scope="col" class="n">Cost in ' + baseLabel + " money</th>" +
+      '<th scope="col" class="n">Cost in ' + baseLabel + " money, at " + pct(o.savingsRate) + "</th>" +
       '<th scope="col" class="n">Difference</th>' +
       "</tr></thead><tbody>" +
       choices.map(function (c, i) {
@@ -2384,7 +2430,7 @@
 
     var from = r.years[0].taxYear, to = r.years[r.years.length - 1].taxYear;
     var span = Math.max(1, to - from);
-    var W = 760, ml = 8, mr = 8, iw = W - ml - mr, axis = 34;
+    var W = vizW("milestones", 200, 760, 200), ml = 8, mr = 8, iw = W - ml - mr, axis = 34;
     var x = function (y) { return ml + ((y - from) / span) * iw; };
 
     // Study and repayment as two weights of the same line, not two colours
@@ -2486,7 +2532,7 @@
         '<td class="n">' + ageAt(y.taxYear) + "</td>" +
         '<td class="n">' + (y.phase === "studying" ? "studying" : gbp(y.salary)) + "</td>" +
         '<td class="n">' + (y.threshold ? gbp(y.threshold) : "\u2014") + "</td>" +
-        '<td class="n">' + (y.phase === "studying" ? "\u2014" : gbp(y.monthlyRepayment)) + "</td>" +
+        '<td class="n">' + (y.phase === "studying" ? "\u2014" : gbp(y.monthlyPaid != null ? y.monthlyPaid : y.monthlyRepayment)) + "</td>" +
         '<td class="n">' + (due > 0 ? gbp(due) : "—") + "</td>" +
         '<td class="n">' + rateCell(y) + "</td>" +
         '<td class="n">' + gbp(y.interest) + "</td>" +
@@ -2537,7 +2583,7 @@
     }
     return '<tr class="months"><td colspan="10"><table class="month-table">' +
       "<thead><tr><th>Month</th><th class=\"n\">Borrowed</th><th class=\"n\">Gross pay</th>" +
-      "<th class=\"n\">Deducted</th><th class=\"n\">Rate</th><th class=\"n\">Interest</th><th class=\"n\">Balance</th></tr></thead>" +
+      "<th class=\"n\">Paid</th><th class=\"n\">Rate</th><th class=\"n\">Interest</th><th class=\"n\">Balance</th></tr></thead>" +
       "<tbody>" + cells + "</tbody></table></td></tr>";
   }
 
@@ -2601,7 +2647,8 @@
       var y = start + i;
       var v = p.manual && p.manual[y] != null ? p.manual[y] : Math.round(predicted[y] || 0);
       rows += "<tr><td>" + E.taxYearLabel(y) + '</td><td class="age">' + ageAt(y) + "</td>" +
-        '<td><input type="number" min="0" max="1000000" step="500" data-year="' + y + '" value="' + Math.round(v) + '" /></td></tr>';
+        '<td><input type="number" min="0" max="1000000" step="500" data-year="' + y +
+        '" value="' + Math.round(v) + '" aria-label="Gross salary in ' + E.taxYearLabel(y) + '" /></td></tr>';
     }
     host.innerHTML = rows;
   }
@@ -2662,8 +2709,8 @@
   function save() {
     try {
       var data = { state: {
-        loanMode: state.loanMode, incomeMode: state.incomeMode,
-        manual: state.manual, manualYears: state.manualYears,
+        loanMode: state.loanMode,
+        basis: state.basis, hideZeros: state.hideZeros, openYears: state.openYears,
         panelOpen: state.panelOpen,
         scen: state.scen, active: state.active, showNoLoan: state.showNoLoan,
         pgTouched: state.pgTouched, workTouched: state.workTouched
@@ -2715,9 +2762,14 @@
       });
       if (data.state) {
         state.loanMode = data.state.loanMode || "course";
-        state.incomeMode = data.state.incomeMode || "predict";
-        state.manual = data.state.manual || {};
-        state.manualYears = data.state.manualYears || 12;
+        // These three were read every time the page was used and saved
+        // never, so the money basis and the empty-year filter reset on
+        // reload while everything around them survived.
+        if (data.state.basis === "real" || data.state.basis === "cash") state.basis = data.state.basis;
+        if (typeof data.state.hideZeros === "boolean") state.hideZeros = data.state.hideZeros;
+        if (data.state.openYears && typeof data.state.openYears === "object") {
+          state.openYears = data.state.openYears;
+        }
         if (Array.isArray(data.state.scen) && data.state.scen.length === SCEN_META.length) {
           state.scen = data.state.scen.map(function (s, i) {
             return mendScenario(s, i);
@@ -2928,8 +2980,9 @@
     document.querySelectorAll("[data-basis]").forEach(function (b) {
       b.addEventListener("click", function () {
         state.basis = b.dataset.basis;
-        document.querySelectorAll("[data-basis]").forEach(function (o) { o.classList.toggle("on", o === b); });
-        renderAllCharts(lastRuns);
+        markBasis();
+        if (lastRuns) renderAllCharts(lastRuns);
+        save();
       });
     });
 
@@ -2949,9 +3002,9 @@
 
     $("toggleZeros").addEventListener("click", function () {
       state.hideZeros = !state.hideZeros;
-      $("toggleZeros").textContent = state.hideZeros
-        ? "Show every year" : "Hide the years with nothing to pay";
-      renderLog(lastSim);
+      markZeros();
+      if (lastSim) renderLog(lastSim);
+      save();
     });
 
     $("downloadCsv").addEventListener("click", download);
@@ -3018,6 +3071,11 @@
   function toggleYear(y) {
     state.openYears[y] = !state.openYears[y];
     renderLog(lastSim);
+    // renderLog replaces the whole tbody, so the row that was just opened
+    // no longer exists and focus falls to the body — a keyboard reader had
+    // to tab back from the top of the document to reach the next year.
+    var back = document.querySelector('#logRows tr[data-year="' + y + '"]');
+    if (back) back.focus();
   }
 
   function init() {
@@ -3045,6 +3103,8 @@
     });
     fitSliders();
     $("showNoLoan").checked = state.showNoLoan;
+    markBasis();
+    markZeros();
     loadScenario();
     fitSliders();
     markScens();

@@ -41,6 +41,7 @@
     },
     plan2: {
       label: "Plan 2",
+      capped: true,          // the 6% cap was announced for this plan
       blurb: "England or Wales, course started between 1 September 2012 and 31 July 2023.",
       rate: 0.09,
       threshold: 29385,
@@ -75,6 +76,7 @@
     },
     pgl: {
       label: "Postgraduate Loan",
+      capped: true,          // the 6% cap was announced for this plan
       blurb: "Master's or doctoral loan. Repaid alongside an undergraduate plan, not instead of it.",
       rate: 0.06,
       threshold: 21000,
@@ -105,7 +107,8 @@
     rpiReformDrop: 0.009,     // and CPIH has run about 0.9pp below RPI
     bankBase: 0.0375,         // Bank of England base rate
     interestCap: 0.06,        // "prevailing market rate" cap, in force to Aug 2027
-    interestCapUntil: 2027,   // the last tax year that cap has been announced for
+    interestCapFrom: 2026,    // the first tax year it was announced for
+    interestCapUntil: 2027,   // the last tax year it has been announced for
     thresholdGrowth: 0.036,   // how fast thresholds rise once unfrozen
     salaryGrowth: 0.03,       // used only to extend a salary line past its last entry
     inflation: 0.041,         // used to restate the ledger in today's money
@@ -245,11 +248,16 @@
       default:
         r = rpi;
     }
-    // The "prevailing market rate" cap is announced a year at a time. Past
-    // the year it has been announced for, the statutory rate stands.
-    var capLives = a.interestCapUntil == null || opts.taxYear == null
-      || opts.taxYear <= a.interestCapUntil;
-    if (a.interestCap != null && capLives) r = Math.min(r, a.interestCap);
+    // The "prevailing market rate" cap is announced a year at a time, for the
+    // plans it names — Plan 2 and Plan 3 (postgraduate). It was applied to
+    // every plan and to every year before it was ever announced, so a loan
+    // that finished repaying in 2019 was being shielded by a 2026 cap.
+    var capped = opts.capped !== false;
+    var y = opts.taxYear;
+    var capLives = capped && a.interestCap != null && (y == null || (
+      (a.interestCapFrom == null || y >= a.interestCapFrom) &&
+      (a.interestCapUntil == null || y <= a.interestCapUntil)));
+    if (capLives) r = Math.min(r, a.interestCap);
     return Math.max(r, 0);
   }
 
@@ -397,7 +405,8 @@
         income: salary,
         threshold: threshold,
         upperThreshold: upper,
-        taxYear: tYear
+        taxYear: tYear,
+        capped: plan.capped === true
       });
 
       var interest = balance > 0 ? balance * (rate / 12) : 0;
@@ -527,6 +536,7 @@
       y.cumInterest = cumInterest;
       y.cumRepaid = cumRepaid;
       y.monthlyRepayment = y.phase === "repaying" && y.months ? (y.repaid / y.months) : 0;
+      y.monthlyPaid = y.months ? ((y.repaid + y.voluntary) / y.months) : 0;
       y.interestOutranPayments = y.phase === "repaying" && y.interest > (y.repaid + y.voluntary);
       years.push(y);
     });
@@ -687,10 +697,16 @@
   /* The savings rate at which repaying as required and clearing the balance
      today cost exactly the same. Below it, clearing wins; above it, keeping
      the money does. Returned as null when one choice wins at every rate. */
-  function breakEvenSavings(r) {
+  /* The rate at which repaying and the alternative cost the same. Which
+     alternative depends on where you are standing: before the course it is
+     never borrowing, once you owe something it is clearing the balance. It
+     always compared against clearing, so before the course it quoted a
+     crossover for an option that was not on offer. */
+  function breakEvenSavings(r, against) {
     var f = function (s) {
       var v = fvAt(r, s);
-      return v ? v.fvRepayments - v.fvLump : 0;
+      if (!v) return 0;
+      return v.fvRepayments - (against === "upfront" ? v.fvUpfront : v.fvLump);
     };
     var lo = 0, hi = 0.30;
     var flo = f(lo), fhi = f(hi);
@@ -815,7 +831,8 @@
         opts.sort(function (a, b) { return a.fv - b.fv; });
         return opts.length ? opts[0] : null;
       })(),
-      breakEven: breakEvenSavings(r),
+      breakEven: breakEvenSavings(r, "lump"),
+      breakEvenUpfront: breakEvenSavings(r, "upfront"),
       foregoneGrowth: foregoneGrowth,
       realForegoneGrowth: foregoneGrowth * deflate,
       // Positive means clearing the balance today was the cheaper of the two.
@@ -869,7 +886,7 @@
             taxYear: y.taxYear, label: y.label, phase: y.phase,
             salary: y.salary, threshold: null, rateLow: null, rateHigh: null,
             openingBalance: 0, closingBalance: 0,
-            borrowed: 0, interest: 0, repaid: 0, voluntary: 0, months: y.months
+            borrowed: 0, interest: 0, repaid: 0, voluntary: 0, months: 0
           };
           order.push(y.taxYear);
         }
@@ -884,6 +901,10 @@
         t.repaid += y.repaid;
         t.voluntary += y.voluntary;
         t.salary = Math.max(t.salary, y.salary);
+        // The longest of the contributing loans, not whichever was seen
+        // first: a loan that cleared in month 11 was making the combined
+        // year divide twelve months of payments by eleven.
+        t.months = Math.max(t.months, y.months || 0);
         if (y.phase === "repaying") t.phase = "repaying";
       });
     });
@@ -896,6 +917,7 @@
       cumRepaid += y.repaid + y.voluntary;
       y.cumBorrowed = cumBorrowed; y.cumInterest = cumInterest; y.cumRepaid = cumRepaid;
       y.monthlyRepayment = y.months ? y.repaid / y.months : 0;
+      y.monthlyPaid = y.months ? (y.repaid + y.voluntary) / y.months : 0;
       y.interestOutranPayments = y.phase === "repaying" && y.interest > (y.repaid + y.voluntary);
       var f = Math.pow(1 + a.inflation, -(y.taxYear - order[0]));
       y.deflator = f;

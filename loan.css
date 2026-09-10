@@ -795,6 +795,9 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 }
 .tl__grip:hover::after { opacity: 1; box-shadow: 0 0 8px var(--k); }
 .tl__x {
+  /* The right grip comes after this in the DOM and is painted over its
+     right half, centre included, so a click on the cross resized instead. */
+  z-index: 2;
   position: absolute; top: 0; right: 0;
   width: 1rem; height: 55%; line-height: 1;
   display: grid; place-items: center;
@@ -802,6 +805,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   color: var(--k); opacity: 0; font-size: .8rem; cursor: pointer;
 }
 .tl__blk:hover .tl__x { opacity: .8; }
+.tl__x:focus-visible { opacity: 1; outline: 2px solid var(--k); outline-offset: 1px; }
 .tl__x:hover { opacity: 1; background: color-mix(in srgb, var(--k) 25%, transparent); }
 .tl__blk:hover .tl__grip::after { opacity: .9; }
 .tlkey {
@@ -846,6 +850,11 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   gap: .25rem 1.1rem;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
+/* A <details> lays its non-summary content out in an anonymous box, so the
+   fold's grid-column: 1 / -1 never reached the grid and the whole section
+   was squeezed into column two — off the right edge of a phone. */
+.grp--fold { display: block; }
+.grp--fold > summary { display: flex; }
 .grp > .grp__head, .grp > .readout, .grp > .seg,
 .grp > .check, .grp > .btnrow, .grp > .pane, .grp > .fold,
 .pane > .readout, .pane > .hint, .pane > .lede,
@@ -940,6 +949,10 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   border: 1px solid var(--line-2); background: var(--bg-4); color: var(--ink-3);
 }
 .panel__toggle:hover { background: var(--bg-5); color: var(--ink); }
+
+/* Below the split there is no column to fold away, so the button that folds
+   it goes too rather than reporting a collapse that never happened. */
+@media (max-width: 1039px) { .panel__toggle { display: none; } }
 
 @media (min-width: 1040px) {
   body.panel-shut .app { grid-template-columns: 54px minmax(0, 1fr); }
