@@ -1540,8 +1540,8 @@
       {
         k: "In " + baseYear + " money",
         v: gbp(r.totalRealRepaid),
-        sub: "the same repayments, valued when the loan was taken out, at " +
-             pct(sim.assumptions.inflation) + " inflation",
+        sub: "value of the repayments, adjusted for inflation to today\u2019s value, at " +
+             pct(sim.assumptions.inflation) + " a year",
         tone: "cool"
       },
       {
@@ -1557,8 +1557,8 @@
         k: "…and in " + baseYear + " money",
         v: gbp(o.realForegoneGrowth),
         sub: o.foregoneGrowth > 0
-          ? "the same forfeited growth, valued when the loan was taken out, at " +
-            pct(sim.assumptions.inflation) + " inflation"
+          ? "value of that growth, adjusted for inflation to today\u2019s value, at " +
+            pct(sim.assumptions.inflation) + " a year"
           : "nothing forfeited, in any money",
         tone: "warm"
       }
