@@ -80,6 +80,25 @@ way. It moves with the tuition and the course length, because it is the cost
 of the course. In balance mode it becomes the cost of clearing what you owe
 today in one payment.
 
+## A recommendation, in a sentence
+
+The panel used to be a wall of figures with no conclusion drawn from them. It
+now opens with one:
+
+- **Written off?** *Take the loan, and never overpay.* The deduction is set by
+  your salary and the threshold, not by what you owe, so an extra pound paid in
+  is a pound that never comes back.
+- **A clear winner?** It is named, with how much better off it leaves you.
+- **Within 5%?** *Too close to call.* A spread that small is far inside the
+  error on a forty-year forecast, and pretending otherwise would be false
+  precision.
+
+Where the choice turns on the savings rate, the **break-even** is given: the
+return at which repaying and clearing cost exactly the same. Below it, clearing
+early wins; above it, keeping the money does. It is found by binary search over
+the same future-value arithmetic the panel shows, so it cannot drift away from
+the figures beside it.
+
 ## The three headline figures
 
 A band of three boxes sits above the charts, for whichever profile is selected:

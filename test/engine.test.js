@@ -419,6 +419,35 @@ test("the track has a row per repaying year, both choices side by side", functio
   }
 });
 
+test("the break-even savings rate is where the two choices tie", function () {
+  var mk = function (s) {
+    return E.simulate({
+      loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
+      salaries: { 2030: 45000 },
+      assumptions: { savings: s }
+    }).opportunity;
+  };
+  var be = mk(0.045).breakEven;
+  ok(be > 0 && be < 0.3, "a crossing exists, at " + (be * 100).toFixed(2) + "%");
+
+  var at = mk(be);
+  near(at.fvRepayments, at.fvLump, Math.max(50, at.fvLump * 0.001), "the two cost the same there");
+
+  // And it really is a crossing: each side favours a different choice.
+  ok(mk(be - 0.01).clearingIsBetter, "just below it, clearing is cheaper");
+  ok(!mk(be + 0.01).clearingIsBetter, "just above it, keeping the money is");
+});
+
+test("no break-even is reported when one choice wins at every rate", function () {
+  // A balance that is written off almost untouched: repaying is always cheaper.
+  var o = E.simulate({
+    loans: [{ plan: "plan5", openingBalance: 60000, repaymentStartYear: 2030 }],
+    salaries: { 2030: 20000 },
+    assumptions: { salaryGrowth: 0 }
+  }).opportunity;
+  eq(o.breakEven, null, "there is nothing to trade off");
+});
+
 test("the growth given up is the pot less what you put into it", function () {
   var s = withSalary(60000);
   var o = s.opportunity, r = s.combined;

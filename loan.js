@@ -1068,6 +1068,64 @@
 
   function upfrontTotal(sim) { return sim.combined.borrowed; }
 
+  /* ---- what to actually do ------------------------------------------------ *
+   * The panel was a wall of figures with no conclusion. This states one, in
+   * a sentence, and says when the numbers are too close to support one.
+   * ---------------------------------------------------------------------- */
+
+  function recommend(sim) {
+    var r = sim.combined, o = sim.opportunity;
+
+    if (r.borrowed <= 0) return null;
+
+    if (!o.years) {
+      return { tone: "good", verdict: "Take the loan. It will never cost you anything.",
+        body: "Nothing is ever deducted on this income, and the balance is written off in " +
+              r.writeOffLabel + ". Paying a penny towards it would be a gift to the Treasury." };
+    }
+
+    // Written off with a real balance left: overpaying is money thrown away.
+    if (!r.everRepaidInFull) {
+      return { tone: "good", verdict: "Take the loan, and never overpay.",
+        body: "<b>" + gbp(r.writtenOff) + "</b> of this balance is cancelled in " + r.writeOffLabel +
+              ". You repay <b>" + gbp(r.totalRepaid) + "</b> whatever the balance is, because the " +
+              "deduction is set by your salary and the threshold, not by what you owe — so an extra " +
+              "pound paid in is a pound that simply never comes back." };
+    }
+
+    // It clears. Now the timing argument decides, and often barely.
+    var opts = [
+      { k: "repay", label: "borrow and repay as required", fv: o.fvRepayments },
+      { k: "upfront", label: "pay the fees in cash", fv: o.fvUpfront },
+      { k: "clear", label: "clear the balance today", fv: o.fvLump }
+    ].filter(function (c) { return c.fv > 0; }).sort(function (a, b) { return a.fv - b.fv; });
+
+    var best = opts[0], worst = opts[opts.length - 1];
+    var spread = worst.fv - best.fv;
+    var margin = best.fv > 0 ? spread / best.fv : 0;
+
+    var flip = o.breakEven != null
+      ? " The two swap places at a savings return of <b>" + pct(o.breakEven) +
+        "</b>: below that, clearing it early wins; above it, keeping the money does."
+      : "";
+
+    // Under a twentieth apart is not a difference anyone should act on.
+    if (margin < 0.05) {
+      return { tone: "even", verdict: "Too close to call — do whichever suits you.",
+        body: "Priced at " + E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1) + ", the options " +
+              "sit within <b>" + gbp(spread) + "</b> of each other, about " + pct(margin, 0) +
+              ". That is far inside the error on a forecast this long, so treat it as a wash and " +
+              "decide on how much you would rather hold cash." + flip };
+    }
+
+    return { tone: best.k === "repay" ? "good" : "warn",
+      verdict: best.k === "repay" ? "Take the loan and repay as required."
+             : best.k === "clear" ? "Clear the balance as soon as you can."
+             : "Pay the fees in cash if you can.",
+      body: "Priced at the same date, that comes to <b>" + gbp(best.fv) + "</b> against <b>" +
+            gbp(worst.fv) + "</b> for the dearest — <b>" + gbp(spread) + "</b> better off." + flip };
+  }
+
   /* ---- the three figures that matter most -------------------------------- *
    * For the selected profile: what it costs in cash, what that is worth in
    * the money of the year the loan was taken out, and what the same payments
@@ -1170,17 +1228,22 @@
       : "the end";
     var g3 = "All three, priced at " + endLabel;
 
+    var peakBalance = repaying.reduce(function (m, y) {
+      return Math.max(m, y.closingBalance);
+    }, r.balanceAtRepayStart);
+
     var rows = [
       { g: "The loan", k: "Borrowed", v: gbp(r.borrowed) },
       { g: "The loan", k: "Owed when repayment starts", v: gbp(r.balanceAtRepayStart) },
       { g: "The loan", k: "Interest charged", v: gbp(r.totalInterest), c: "warn" },
-      { g: "The loan", k: "Peak balance", v: gbp(repaying.reduce(function (m, y) {
-          return Math.max(m, y.closingBalance); }, r.balanceAtRepayStart)) },
+      { g: "The loan", k: "Peak balance", v: gbp(peakBalance),
+        hide: Math.abs(peakBalance - r.balanceAtRepayStart) < 1 },
 
       { g: "What you pay", k: "Handed over, in cash", v: gbp(r.totalRepaid), c: "good" },
       { g: "What you pay", k: "Handed over, today's money", v: gbp(r.totalRealRepaid), c: "good" },
       { g: "What you pay", k: "First deduction", v: firstPaid ? gbp(firstPaid.monthlyRepayment) + " a month" : "never" },
-      { g: "What you pay", k: "Peak deduction", v: gbp(peak) + " a month" },
+      { g: "What you pay", k: "Peak deduction", v: gbp(peak) + " a month",
+        hide: !firstPaid || Math.abs(peak - firstPaid.monthlyRepayment) < 1 },
       { g: "What you pay", k: "Years repaying", v: String(r.yearsRepaying) },
       { g: "What you pay", k: r.everRepaidInFull ? "Cleared" : "Written off",
         v: r.everRepaidInFull ? r.clearedLabel : gbp(r.writtenOff) + " in " + r.writeOffLabel,
@@ -1190,7 +1253,7 @@
     ];
 
     var groups = [];
-    rows.forEach(function (row) {
+    rows.filter(function (row) { return !row.hide; }).forEach(function (row) {
       var g = groups.filter(function (x) { return x.name === row.g; })[0];
       if (!g) { g = { name: row.g, rows: [] }; groups.push(g); }
       g.rows.push(row);
@@ -1232,6 +1295,13 @@
         return "<div><dt>" + row.k + '</dt><dd class="' + (row.c || "") + '">' + row.v + "</dd></div>";
       }).join("") + "</dl></div>";
     }).join("") + table;
+
+    var rec = recommend(sim);
+    $("recBox").innerHTML = rec
+      ? '<p class="rec__k">Recommendation</p><p class="rec__v">' + rec.verdict + "</p>" +
+        '<p class="rec__b">' + rec.body + "</p>"
+      : "";
+    $("recBox").className = "rec" + (rec ? " is-" + rec.tone : " is-empty");
 
     renderOppChart(sim);
 
@@ -1277,12 +1347,12 @@
     }).join(" ");
 
     $("oppChart").innerHTML = f.open +
-      '<path d="' + line(pts, f) + '" fill="none" stroke="' + sim.meta.colour + '" stroke-width="2.25"/>' +
+      '<path d="' + line(pts, f) + '" fill="none" stroke="var(--good)" stroke-width="2.25"/>' +
       '<path d="' + lineW + '" fill="none" stroke="var(--warn)" stroke-width="2.25" stroke-dasharray="5 4"/>' +
       f.close;
 
     $("oppKey").innerHTML =
-      '<i style="color:' + sim.meta.colour + '">Your repayments, saved instead</i>' +
+      '<i style="color:var(--good)">Your repayments, saved instead</i>' +
       '<i class="k-int">The balance you did not clear, growing at ' + pct(o.savingsRate) + "</i>" +
       '<i style="color:var(--ink-4)">whichever is lower is the cheaper choice</i>';
   }

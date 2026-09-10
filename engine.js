@@ -563,6 +563,58 @@
    * monthly deductions averages out to.
    * -------------------------------------------------------------------- */
 
+  // Both choices, carried to `endYear` at savings rate `s`. Separated out so
+  // the break-even search can run it many times without re-simulating.
+  function fvAt(r, s) {
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!repaying.length) return null;
+
+    var startYear = repaying[0].taxYear;
+    var endYear = repaying[repaying.length - 1].taxYear + 1;
+    var span = endYear - startYear;
+    var lump = r.balanceAtRepayStart || 0;
+
+    var fvRepayments = 0, paidOut = 0;
+    repaying.forEach(function (y) {
+      var paid = y.repaid + y.voluntary;
+      paidOut += paid;
+      fvRepayments += paid * Math.pow(1 + s, Math.max(0, endYear - y.taxYear - 0.5));
+    });
+
+    var upfrontPaid = 0, fvUpfront = 0;
+    r.years.forEach(function (y) {
+      if (!(y.borrowed > 0)) return;
+      upfrontPaid += y.borrowed;
+      fvUpfront += y.borrowed * Math.pow(1 + s, Math.max(0, endYear - y.taxYear - 0.5));
+    });
+
+    var fvLump = lump * Math.pow(1 + s, span);
+    if (upfrontPaid <= 0) { upfrontPaid = lump; fvUpfront = fvLump; }
+
+    return { startYear: startYear, endYear: endYear, span: span, lump: lump,
+             fvRepayments: fvRepayments, paidOut: paidOut,
+             upfrontPaid: upfrontPaid, fvUpfront: fvUpfront, fvLump: fvLump };
+  }
+
+  /* The savings rate at which repaying as required and clearing the balance
+     today cost exactly the same. Below it, clearing wins; above it, keeping
+     the money does. Returned as null when one choice wins at every rate. */
+  function breakEvenSavings(r) {
+    var f = function (s) {
+      var v = fvAt(r, s);
+      return v ? v.fvRepayments - v.fvLump : 0;
+    };
+    var lo = 0, hi = 0.30;
+    var flo = f(lo), fhi = f(hi);
+    if (!isFinite(flo) || !isFinite(fhi) || flo === 0) return null;
+    if (flo > 0 === fhi > 0) return null;             // no crossing in range
+    for (var i = 0; i < 60; i++) {
+      var mid = (lo + hi) / 2;
+      if (f(mid) > 0 === flo > 0) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
   function opportunity(r, opts) {
     var s = opts && opts.savings != null ? opts.savings : 0.045;
     var infl = opts && opts.inflation != null ? opts.inflation : DEFAULT_ASSUMPTIONS.inflation;
@@ -572,7 +624,7 @@
       return { lump: r.balanceAtRepayStart || 0, years: 0, savingsRate: s,
                fvRepayments: 0, fvLump: r.balanceAtRepayStart || 0,
                paidOut: 0, foregoneGrowth: 0, realForegoneGrowth: 0,
-               upfrontPaid: 0, fvUpfront: 0, realFvUpfront: 0, cheapest: null,
+               upfrontPaid: 0, fvUpfront: 0, realFvUpfront: 0, cheapest: null, breakEven: null,
                clearingSaves: -(r.balanceAtRepayStart || 0), clearingIsBetter: false,
                realFvRepayments: 0, realFvLump: r.balanceAtRepayStart || 0,
                realClearingSaves: -(r.balanceAtRepayStart || 0), track: [] };
@@ -645,6 +697,7 @@
         opts.sort(function (a, b) { return a.fv - b.fv; });
         return opts.length ? opts[0] : null;
       })(),
+      breakEven: breakEvenSavings(r),
       foregoneGrowth: foregoneGrowth,
       realForegoneGrowth: foregoneGrowth * deflate,
       // Positive means clearing the balance today was the cheaper of the two.
@@ -775,6 +828,7 @@
     simulate: simulate,
     simulateLoan: simulateLoan,
     opportunity: opportunity,
+    breakEvenSavings: breakEvenSavings,
     thresholdFor: thresholdFor,
     upperThresholdFor: upperThresholdFor,
     interestRate: interestRate,

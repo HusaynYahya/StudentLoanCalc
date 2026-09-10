@@ -632,3 +632,24 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .choices td.lead { font-size: 1rem; color: var(--ink); }
 .choices tr.is-win th, .choices tr.is-win td.lead { color: var(--good); }
 .choices tr.is-win th span { color: var(--good); opacity: .8; }
+
+/* ---- the recommendation ------------------------------------------------ */
+
+.rec {
+  border-radius: 8px; padding: .9rem 1.1rem; margin-bottom: 1.2rem;
+  background: var(--bg-4); border-left: 3px solid var(--ink-4);
+}
+.rec.is-empty { display: none; }
+.rec.is-good { border-left-color: var(--good); }
+.rec.is-warn { border-left-color: var(--warn); }
+.rec.is-even { border-left-color: var(--info); }
+.rec__k {
+  margin: 0 0 .2rem; font-size: .62rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+}
+.rec__v { margin: 0; font-size: 1.08rem; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.rec.is-good .rec__v { color: var(--good); }
+.rec.is-warn .rec__v { color: var(--warn); }
+.rec.is-even .rec__v { color: var(--info); }
+.rec__b { margin: .45rem 0 0; font-size: .82rem; line-height: 1.6; color: var(--ink-3); max-width: 82ch; }
+.rec__b b { color: var(--ink); font-family: var(--num); font-weight: 600; }
