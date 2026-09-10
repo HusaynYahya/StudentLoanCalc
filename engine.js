@@ -722,6 +722,11 @@
     var startYear = repaying[0].taxYear;
     var endYear = repaying[repaying.length - 1].taxYear + 1;   // the loan is done by here
     var span = endYear - startYear;
+    // The year everything real is quoted in: the year the ledger opens, which
+    // is the course start, not the April repayments begin. Deflating over the
+    // repayment span instead left every real figure short by the course —
+    // four years at 4.1% is 17% too much money.
+    var baseYear = r.years.length ? r.years[0].taxYear : startYear;
     var lump = r.balanceAtRepayStart || 0;
 
     var fvRepayments = 0, track = [], running = 0;
@@ -739,7 +744,7 @@
       });
     });
 
-    var deflate = Math.pow(1 + infl, -span);
+    var deflate = Math.pow(1 + infl, -(endYear - baseYear));
 
     // What the repayments would have earned on top of themselves had they gone
     // into a savings account instead: the pot, less what you actually put in.
@@ -752,7 +757,6 @@
     // Ranking is identical to the forward view — it is the same numbers scaled
     // by one constant — but a figure in money the reader is standing in is far
     // easier to weigh than one in 2057's.
-    var baseYear = r.years.length ? r.years[0].taxYear : startYear;
     var toBase = function (v, year) { return v / Math.pow(1 + s, year - baseYear); };
 
     var pvRepayments = 0;

@@ -1105,10 +1105,19 @@
                  writtenOff: r.writtenOff || 0 };
       };
       var lo = scaled(sp.lo), hi = scaled(sp.hi);
-      var a1 = Math.min(lo.repaid, hi.repaid), b1 = Math.max(lo.repaid, hi.repaid);
+      // The bar is drawn from the smaller outcome to the larger, but the
+      // assumption that produced the smaller one is not always the lower
+      // setting: raise inflation and the total falls. Printing the low
+      // setting at the left end regardless told the reader 2.6% inflation
+      // costs £100k when it costs £138k. The labels follow the outcome.
+      var lowerFirst = lo.repaid <= hi.repaid;
+      var a1 = lowerFirst ? lo.repaid : hi.repaid;
+      var b1 = lowerFirst ? hi.repaid : lo.repaid;
       return { title: sp.title, why: sp.why, now: sp.now,
-               loLabel: sp.lo.label, hiLabel: sp.hi.label,
-               lo: lo, hi: hi, min: a1, max: b1, range: b1 - a1 };
+               loLabel: lowerFirst ? sp.lo.label : sp.hi.label,
+               hiLabel: lowerFirst ? sp.hi.label : sp.lo.label,
+               lo: lowerFirst ? lo : hi, hi: lowerFirst ? hi : lo,
+               min: a1, max: b1, range: b1 - a1 };
     }).sort(function (x, y) { return y.range - x.range; });
 
     // A common axis, so bar lengths can be compared against each other.
@@ -1578,15 +1587,17 @@
     var boxes = [
       {
         k: "Total repayment",
+        x: "totalRepaid",
         v: gbp(r.totalRepaid),
         sub: r.everRepaidInFull
           ? "total repayment paid. Loan paid back in " + r.clearedLabel
           : "total repayment paid. Loan never cleared \u2014 " +
-            gbp(r.writtenOff) + " written off in " + endYearLabel,
+            gbp(r.writtenOff) + " written off in " + r.writeOffLabel,
         tone: ""
       },
       {
         k: "In " + baseYear + " money",
+        x: "totalRealRepaid",
         v: gbp(r.totalRealRepaid),
         sub: "value of the repayments, adjusted for inflation to " + baseYear + " value, at " +
              pct(sim.assumptions.inflation) + " a year",
@@ -1596,6 +1607,7 @@
         // The question anyone with the fee money in hand actually has: spend
         // it on the fees, or borrow and let it sit somewhere earning.
         k: "Fees saved instead, by " + endYearLabel,
+        x: "fvUpfront",
         v: gbp(o.fvUpfront),
         sub: o.upfrontPaid > 0
           ? "the " + gbp(o.upfrontPaid) + " of fees, put in a savings account rather than spent, " +
@@ -1605,6 +1617,7 @@
       },
       {
         k: "…and in " + baseYear + " money",
+        x: "realFvUpfront",
         v: gbp(o.realFvUpfront),
         sub: o.upfrontPaid > 0
           ? "the same pot, adjusted for inflation to " + baseYear + " value, at " +
@@ -1617,7 +1630,7 @@
     $("bigs").innerHTML = boxes.map(function (bx) {
       return '<div class="big ' + bx.tone + '" style="--c:' + sim.meta.colour + '">' +
         '<p class="big__k">' + bx.k + "</p>" +
-        '<p class="big__v">' + bx.v + "</p>" +
+        '<p class="big__v">' + (bx.x ? tag(bx.x, bx.v) : bx.v) + "</p>" +
         '<p class="big__s">' + bx.sub + "</p></div>";
     }).join("") +
       '<p class="bigs__who">Profile <b style="color:' + sim.meta.colour + '">' + sim.meta.id +
@@ -1645,11 +1658,362 @@
             ? cs[0].years + " yrs \u00b7 " + E.taxYearLabel(cs[0].taxYear - 1)
             : cs.map(function (c) { return c.years; }).join(" / ") + " yrs";
         })() },
-      { k: "Threshold now", v: gbp(E.thresholdFor(runs[0].settings.plan, Math.max(E.BASE_TAX_YEAR, repayStartYear()), a)) }
+      { k: "Threshold, " + nowLabel(),
+        v: gbp(E.thresholdFor(runs[0].settings.plan, nowTaxYear(), a)) }
     ];
     $("facts").innerHTML = facts.map(function (f) {
       return "<div><dt>" + f.k + "</dt><dd>" + f.v + "</dd></div>";
     }).join("");
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * WHERE A NUMBER CAME FROM
+   *
+   * Every figure on this page is the end of a chain of arithmetic and a set
+   * of guesses. Showing the figure and hiding the chain asks to be trusted;
+   * this shows the chain. Each entry says what the number is, how it was
+   * worked out with this profile's own values substituted in, which
+   * assumptions it leans on, and — where it matters — what it does not tell
+   * you, because a number read for more than it says is worse than no number.
+   * -------------------------------------------------------------------- */
+
+  var EXPLAIN = {};
+
+  // Named so a reader can be sent to the control that sets an assumption.
+  var ASSUMPTION = {
+    rpi:             { id: "rpi",             name: "RPI, long run" },
+    rpiReformDrop:   { id: "rpiReformDrop",   name: "RPI becomes CPIH in 2030" },
+    inflation:       { id: "inflation",       name: "Inflation" },
+    savings:         { id: "savings",         name: "Savings account rate" },
+    thresholdGrowth: { id: "thresholdGrowth", name: "How fast thresholds rise" },
+    bankBase:        { id: "bankBase",        name: "Base rate" },
+    plan:            { id: "plan",            name: "Which plan" },
+    tuition:         { id: "tuition",         name: "Tuition a year" },
+    maintenance:     { id: "maintenance",     name: "Maintenance a year" },
+    overpay:         { id: "overpay",         name: "Overpay a month" }
+  };
+
+  function ex(key, build) { EXPLAIN[key] = build; }
+
+  // Marks a rendered figure as explainable. The value is passed through
+  // untouched, so a caller can wrap without restructuring anything.
+  function tag(key, html) {
+    return '<span class="xp" data-explain="' + key + '" role="button" tabindex="0" ' +
+      'aria-label="How this figure was worked out">' + html + "</span>";
+  }
+
+  function pounds(n) { return gbp(Math.round(n)); }
+
+  /* ---- the figures ------------------------------------------------------- */
+
+  ex("totalRepaid", function (sim) {
+    var r = sim.combined;
+    return {
+      title: "Total repayment",
+      what: "Every pound deducted from your pay over the life of the loan, added up as cash of the day it left you. Not adjusted for anything.",
+      how: [
+        "9% of whatever each month's gross pay exceeds a twelfth of the repayment threshold, rounded down to a whole pound, every month you earn above it.",
+        "Summed over " + r.yearsRepaying + (r.yearsRepaying === 1 ? " year" : " years") +
+          " of repayment, " + (r.years.length ? r.years[0].label : "") + " to " +
+          (r.everRepaidInFull ? r.clearedLabel : r.writeOffLabel) + ".",
+        r.everRepaidInFull
+          ? "The last payment is trimmed to whatever was left, so it does not overshoot."
+          : "Deductions stop at the write-off, " + r.writeOffLabel + ", with " +
+            pounds(r.writtenOff) + " still outstanding. That balance is cancelled, not paid."
+      ],
+      rests: ["plan", "thresholdGrowth", "rpi", "rpiReformDrop"],
+      careful: "Pounds thirty years apart are added together here as though they were the same size. They are not — see the figure beside it."
+    };
+  });
+
+  ex("totalRealRepaid", function (sim) {
+    var r = sim.combined, base = r.years.length ? r.years[0].label : nowLabel();
+    var a = sim.assumptions;
+    return {
+      title: "Total repayment, in " + base + " money",
+      what: "The same repayments, each one shrunk to what it would buy in " + base + ". This is the figure to compare against a price you know today.",
+      how: [
+        "Each year's repayment is divided by " + pct(a.inflation) + " compounded over the years between " +
+          base + " and that year.",
+        "A payment of £1,000 made twenty years out is worth about " +
+          pounds(1000 / Math.pow(1 + a.inflation, 20)) + " in " + base + " money at that rate.",
+        pounds(r.totalRepaid) + " of cash comes to " + pounds(r.totalRealRepaid) + " once every payment is treated that way."
+      ],
+      rests: ["inflation"],
+      careful: "This uses inflation — purchasing power. The options table discounts at the savings rate instead, which answers a different question and gives a different number."
+    };
+  });
+
+  ex("fvUpfront", function (sim) {
+    var o = sim.opportunity, r = sim.combined;
+    var end = r.years.length ? E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1) : "the end";
+    return {
+      title: "Fees saved instead",
+      what: "If you had the fee money and put it in a savings account rather than spending it on fees, this is what the pot would be worth by " + end + ".",
+      how: [
+        "Each year's fees and living costs — " + pounds(o.upfrontPaid) + " in all — are treated as staying in your hands.",
+        "Each of those amounts is grown at " + pct(o.savingsRate) + " a year from the year you would have spent it until " + end + ".",
+        "Money left longest grows most, which is why the pot is so much larger than the sum put in."
+      ],
+      rests: ["savings", "tuition", "maintenance"],
+      careful: "This is only half the trade. Taking that path means borrowing, and the repayments are the two boxes to the left."
+    };
+  });
+
+  ex("realFvUpfront", function (sim) {
+    var o = sim.opportunity, r = sim.combined;
+    var base = r.years.length ? r.years[0].label : nowLabel();
+    return {
+      title: "The saved pot, in " + base + " money",
+      what: "The same pot, shrunk to what it would buy in " + base + ". Set this against the repayments in " + base + " money to see which way the trade falls.",
+      how: [
+        "The pot of " + pounds(o.fvUpfront) + " is divided by " + pct(sim.assumptions.inflation) +
+          " compounded over the years between " + base + " and the year it is reached.",
+        "That leaves " + pounds(o.realFvUpfront) + "."
+      ],
+      rests: ["inflation", "savings"],
+      careful: "A savings rate above inflation is doing the work here. Set them equal and most of the gain disappears."
+    };
+  });
+
+  ex("borrowed", function (sim) {
+    var r = sim.combined;
+    return {
+      title: "Borrowed",
+      what: "The face value of the loan: everything drawn down, before a penny of interest.",
+      how: [
+        "Tuition and maintenance are drawn in three instalments an academic year, from the September the course starts.",
+        pounds(num("tuition", 0) + num("maintenance", 0)) + " a year for " +
+          Math.round(num("courseYears", 3)) + " years comes to " + pounds(r.borrowed) + "."
+      ],
+      rests: ["tuition", "maintenance"]
+    };
+  });
+
+  ex("owedNow", function (sim) {
+    var o = owedNow(sim);
+    return {
+      title: "Outstanding in " + nowLabel(),
+      what: "What the loan stands at right now — not what it will be, and not what it was.",
+      how: o.owed > 0
+        ? ["The closing balance of the most recent month in the ledger.",
+           "Everything drawn down so far, plus interest compounded monthly since the first instalment, less anything already deducted from your pay.",
+           "It comes to " + pounds(o.owed) + "."]
+        : ["Nothing is outstanding: " + o.text + "."],
+      rests: ["rpi", "plan"]
+    };
+  });
+
+  ex("balanceAtRepayStart", function (sim) {
+    var r = sim.combined;
+    var grown = Math.max(0, r.balanceAtRepayStart - r.borrowed);
+    return {
+      title: "Owed when repayment starts",
+      what: "The debt on the April repayments first fall due — the point from which the 9% starts coming out of your pay.",
+      how: [
+        "Interest runs from the first instalment, not from graduation.",
+        pounds(r.borrowed) + " borrowed has become " + pounds(r.balanceAtRepayStart) + " by then: " +
+          pounds(grown) + " of it is interest run up while you were still studying."
+      ],
+      rests: ["rpi", "plan"]
+    };
+  });
+
+  ex("totalInterest", function (sim) {
+    var r = sim.combined;
+    return {
+      title: "Interest charged",
+      what: "Every pound of interest added to the balance across the loan's whole life.",
+      how: [
+        "Interest is added monthly, at a twelfth of the annual rate, on whatever the balance stands at.",
+        "The rate depends on the plan: RPI on Plan 5, RPI to RPI + 3% on Plan 2 depending on income, the lower of RPI and base + 1% on Plans 1 and 4.",
+        "On " + pounds(r.borrowed) + " borrowed, " + pounds(r.totalInterest) + " of interest is charged."
+      ],
+      rests: ["rpi", "rpiReformDrop", "bankBase", "plan"],
+      careful: "Interest charged is not the same as interest paid. Where a balance is written off, much of this was never handed over."
+    };
+  });
+
+  ex("peakBalance", function (sim, ctx) {
+    return {
+      title: "Peak balance",
+      what: "The most you ever owe — the high-water mark before repayments start outrunning the interest.",
+      how: [
+        "For most people the balance keeps climbing after graduation, because 9% of the gap above the threshold is less than the interest being added.",
+        "It turns over only when the repayment exceeds the month's interest.",
+        "Here it peaks at " + pounds(ctx.peakBalance) + "."
+      ],
+      rests: ["rpi", "thresholdGrowth", "plan"]
+    };
+  });
+
+  ex("firstDeduction", function (sim, ctx) {
+    var f = ctx.firstPaid;
+    if (!f) return { title: "First deduction", what: "Nothing is ever deducted on this profile.",
+      how: ["Your income never rises above the repayment threshold, so no deduction is ever due."], rests: ["thresholdGrowth", "plan"] };
+    var thr = f.threshold || 0;
+    return {
+      title: "First deduction",
+      what: "What comes off your payslip in the first month you owe anything.",
+      how: [
+        "Gross pay that month is about " + pounds(f.salary / 12) + ".",
+        "A twelfth of the " + pounds(thr) + " threshold is " + pounds(thr / 12) + ".",
+        "9% of the difference, rounded down to a whole pound, is " + pounds(f.monthlyRepayment) + " a month."
+      ],
+      rests: ["plan", "thresholdGrowth"],
+      careful: "PAYE looks at each pay period on its own. A bonus month takes more, and a lean month takes less, with no reckoning up at year end."
+    };
+  });
+
+  ex("yearsRepaying", function (sim) {
+    var r = sim.combined;
+    return {
+      title: "Years repaying",
+      what: "How long money is coming out of your pay for.",
+      how: [
+        "Counted from the April after the course ends to the year the loan ends — " +
+          (r.everRepaidInFull ? "cleared in " + r.clearedLabel : "written off in " + r.writeOffLabel) + ".",
+        "That is " + r.yearsRepaying + (r.yearsRepaying === 1 ? " year" : " years") + "."
+      ],
+      rests: ["plan"],
+      careful: "Years in which you earn under the threshold still count towards the write-off clock, even though nothing is deducted."
+    };
+  });
+
+  ex("writeOff", function (sim) {
+    var r = sim.combined;
+    var plan = E.RULES[sim.settings.plan];
+    return {
+      title: r.everRepaidInFull ? "Cleared" : "Written off",
+      what: r.everRepaidInFull
+        ? "The year the balance reaches zero and the deductions stop."
+        : "The year whatever is left is cancelled outright, however large.",
+      how: r.everRepaidInFull
+        ? ["Repayments overtake the interest and the balance runs down to nothing by " + r.clearedLabel + "."]
+        : [plan.label + " is written off " + plan.writeOffYears + " years after the April you were first due to repay.",
+           "That falls in " + r.writeOffLabel + ", with " + pounds(r.writtenOff) + " outstanding.",
+           "The balance is cancelled. Nothing is paid, and it does not follow you."],
+      rests: ["plan"],
+      careful: r.everRepaidInFull ? null
+        : "Because it is written off, overpaying would be money thrown away — it would not shorten anything that was going to end anyway."
+    };
+  });
+
+  ex("upfrontPaid", function (sim) {
+    var o = sim.opportunity;
+    return {
+      title: "Paid upfront",
+      what: "What the same course costs if you never borrow and find the money as it falls due.",
+      how: [
+        "Tuition and living costs for each year of the course, added up: " + pounds(o.upfrontPaid) + ".",
+        "No interest, because there is no loan. But all of it leaves your hands during the course rather than over decades."
+      ],
+      rests: ["tuition", "maintenance"]
+    };
+  });
+
+  ex("perPound", function (sim) {
+    var r = sim.combined;
+    return {
+      title: "Cost per pound borrowed",
+      what: "How many pounds leave your pay for each pound you were lent.",
+      how: [
+        pounds(r.totalRepaid) + " handed over on " + pounds(r.borrowed) + " borrowed.",
+        "That is " + r.perPoundBorrowed.toFixed(2) + " for every pound."
+      ],
+      rests: ["rpi", "plan", "thresholdGrowth"],
+      careful: "Below 1.00 means the write-off arrived before you had repaid what you took. It is not a discount you can rely on — it depends entirely on what you earn."
+    };
+  });
+
+  /* ---- the panel --------------------------------------------------------- */
+
+  var xpLast = null;      // what to hand focus back to when it closes
+
+  function openExplain(key, from) {
+    var build = EXPLAIN[key];
+    if (!build || !lastSim) return;
+
+    var ctx = explainContext(lastSim);
+    var e;
+    try { e = build(lastSim, ctx); } catch (err) { return; }
+    if (!e) return;
+
+    var rests = (e.rests || []).map(function (k) {
+      var a = ASSUMPTION[k];
+      if (!a) return "";
+      var el = $(a.id);
+      var val = !el ? "" : el.tagName === "SELECT"
+        ? el.options[el.selectedIndex].text.split("—")[0].trim()
+        : el.value + (el.type === "number" && /rpi|inflation|savings|Growth|bankBase/i.test(a.id) ? "%" : "");
+      return '<li><button type="button" class="xp__go" data-goto="' + a.id + '">' +
+        a.name + "</button>" + (val ? "<span>" + val + "</span>" : "") + "</li>";
+    }).join("");
+
+    $("xpTitle").textContent = e.title;
+    $("xpBody").innerHTML =
+      '<p class="xp__what">' + e.what + "</p>" +
+      '<h4>How it is worked out</h4><ol class="xp__how">' +
+        (e.how || []).map(function (l) { return "<li>" + l + "</li>"; }).join("") + "</ol>" +
+      (rests ? '<h4>What it rests on</h4><ul class="xp__rests">' + rests + "</ul>" : "") +
+      (e.careful ? '<h4>Worth knowing</h4><p class="xp__careful">' + e.careful + "</p>" : "");
+
+    xpLast = from || null;
+    $("xpPanel").hidden = false;
+    document.body.classList.add("xp-open");
+    $("xpClose").focus();
+  }
+
+  function closeExplain() {
+    $("xpPanel").hidden = true;
+    document.body.classList.remove("xp-open");
+    if (xpLast && document.contains(xpLast)) xpLast.focus();
+    xpLast = null;
+  }
+
+  // The few values that are worked out where the figure is rendered rather
+  // than held on the simulation.
+  function explainContext(sim) {
+    var r = sim.combined;
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying" && y.monthlyRepayment > 0; });
+    return {
+      peakBalance: r.years.reduce(function (m, y) { return Math.max(m, y.closingBalance); }, 0),
+      firstPaid: repaying[0] || null
+    };
+  }
+
+  function wireExplain() {
+    var panel = $("xpPanel");
+    if (!panel) return;
+
+    document.addEventListener("click", function (ev) {
+      var go = ev.target.closest("[data-goto]");
+      if (go) {
+        closeExplain();
+        var el = $(go.dataset.goto);
+        if (el) {
+          var grp = el.closest("details");
+          if (grp) grp.open = true;
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          el.focus({ preventScroll: true });
+          el.classList.add("is-lit");
+          setTimeout(function () { el.classList.remove("is-lit"); }, 1600);
+        }
+        return;
+      }
+      var hit = ev.target.closest("[data-explain]");
+      if (hit) { openExplain(hit.dataset.explain, hit); return; }
+      if (ev.target.closest("#xpClose") || ev.target.classList.contains("xp__veil")) closeExplain();
+    });
+
+    document.addEventListener("keydown", function (ev) {
+      if (ev.key === "Escape" && !panel.hidden) { closeExplain(); return; }
+      var hit = ev.target.closest && ev.target.closest("[data-explain]");
+      if (hit && (ev.key === "Enter" || ev.key === " ")) {
+        ev.preventDefault();
+        openExplain(hit.dataset.explain, hit);
+      }
+    });
   }
 
   /* ---- the selected profile, in full ------------------------------------- *
@@ -1683,21 +2047,21 @@
     }, r.balanceAtRepayStart);
 
     var rows = [
-      { g: "The loan", k: "Borrowed", v: gbp(r.borrowed) },
-      { g: "The loan", k: "Outstanding in " + nowLabel(), v: owedNow(sim).text, c: "warn" },
-      { g: "The loan", k: "Owed when repayment starts", v: gbp(r.balanceAtRepayStart) },
-      { g: "The loan", k: "Interest charged", v: gbp(r.totalInterest), c: "warn" },
-      { g: "The loan", k: "Peak balance", v: gbp(peakBalance),
+      { g: "The loan", k: "Borrowed", v: tag("borrowed", gbp(r.borrowed)) },
+      { g: "The loan", k: "Outstanding in " + nowLabel(), v: tag("owedNow", owedNow(sim).text), c: "warn" },
+      { g: "The loan", k: "Owed when repayment starts", v: tag("balanceAtRepayStart", gbp(r.balanceAtRepayStart)) },
+      { g: "The loan", k: "Interest charged", v: tag("totalInterest", gbp(r.totalInterest)), c: "warn" },
+      { g: "The loan", k: "Peak balance", v: tag("peakBalance", gbp(peakBalance)),
         hide: Math.abs(peakBalance - r.balanceAtRepayStart) < 1 },
 
-      { g: "What you pay", k: "Handed over, in cash", v: gbp(r.totalRepaid), c: "good" },
-      { g: "What you pay", k: "Handed over, in " + baseLabel + " money", v: gbp(r.totalRealRepaid), c: "good" },
-      { g: "What you pay", k: "First deduction", v: firstPaid ? gbp(firstPaid.monthlyRepayment) + " a month" : "never" },
+      { g: "What you pay", k: "Handed over, in cash", v: tag("totalRepaid", gbp(r.totalRepaid)), c: "good" },
+      { g: "What you pay", k: "Handed over, in " + baseLabel + " money", v: tag("totalRealRepaid", gbp(r.totalRealRepaid)), c: "good" },
+      { g: "What you pay", k: "First deduction", v: tag("firstDeduction", firstPaid ? gbp(firstPaid.monthlyRepayment) + " a month" : "never") },
       { g: "What you pay", k: "Peak deduction", v: gbp(peak) + " a month",
         hide: !firstPaid || Math.abs(peak - firstPaid.monthlyRepayment) < 1 },
-      { g: "What you pay", k: "Years repaying", v: String(r.yearsRepaying) },
+      { g: "What you pay", k: "Years repaying", v: tag("yearsRepaying", String(r.yearsRepaying)) },
       { g: "What you pay", k: r.everRepaidInFull ? "Cleared" : "Written off",
-        v: r.everRepaidInFull ? r.clearedLabel : gbp(r.writtenOff) + " in " + r.writeOffLabel,
+        v: tag("writeOff", r.everRepaidInFull ? r.clearedLabel : gbp(r.writtenOff) + " in " + r.writeOffLabel),
         c: r.everRepaidInFull ? "good" : "bad" },
 
       { g: "What you pay", k: "\u00a0", v: "" }
@@ -2133,10 +2497,16 @@
     });
 
     var r = sim.combined;
-    rows += '<tr class="final"><td>Total</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td>' +
-      '<td class="n">' + gbp(r.totalRepaid) + '</td><td class="n">' + gbp(r.totalInterest) + '</td>' +
-      '<td class="n">—</td><td class="n">' +
-      (r.everRepaidInFull ? "£0" : gbp(r.writtenOff) + " written off") + "</td></tr>";
+    // Ten columns: tax year, age, salary, threshold, monthly, paid, rate,
+    // interest, paid to date, balance. Six blanks put the total under Rate
+    // and left Paid empty; four put it where it belongs.
+    rows += '<tr class="final"><td>Total</td>' +
+      '<td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td>' +
+      '<td class="n">' + gbp(r.totalRepaid) + '</td>' +
+      '<td class="n"></td>' +
+      '<td class="n">' + gbp(r.totalInterest) + '</td>' +
+      '<td class="n">' + gbp(r.totalRepaid) + '</td>' +
+      '<td class="n">' + (r.everRepaidInFull ? "£0" : gbp(r.writtenOff) + " written off") + "</td></tr>";
 
     body.innerHTML = rows;
   }
@@ -2651,6 +3021,7 @@
     syncSliders();
     wire();
     wireIncomeChart();
+    wireExplain();
     wireTimelineTrack();
     renderTimelineTrack();
     applyPanel();
