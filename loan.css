@@ -976,3 +976,13 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 @media (max-width: 939px) {
   .grp + .grp { border-top: 1px solid var(--line); }
 }
+
+
+/* A chart inside a section takes the row, not one 250px column of it. */
+.grp > .sub, .grp > .sub__note, .grp > .viz, .grp > .key { grid-column: 1 / -1; }
+.grp > .viz { max-width: 100%; }
+.grp > .key { margin-top: .1rem; }
+
+
+/* The line under a sub-heading explains what follows it, so it reads across. */
+.grp > .sub + .note { grid-column: 1 / -1; }

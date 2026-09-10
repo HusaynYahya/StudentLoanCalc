@@ -89,8 +89,20 @@
     }
   };
 
+  /* RPI already published. Student loan interest is set each September from
+     the RPI of the previous March, so a figure here is the March RPI that
+     governs the tax year it is keyed by — settled, not assumed.
+     Read 10 September 2026. */
+  var RPI_KNOWN = {
+    2025: 0.032,              // March 2025 RPI, set rates from 1 Sep 2025
+    2026: 0.041               // March 2026 RPI, sets rates from 1 Sep 2026
+  };
+
   var DEFAULT_ASSUMPTIONS = {
-    rpi: 0.041,               // March 2026 RPI, sets rates from 1 Sep 2026
+    rpi: 0.041,               // long-run RPI on the method in use today
+    rpiKnown: RPI_KNOWN,      // the years that are not a guess at all
+    rpiReformYear: 2030,      // from Feb 2030 RPI is calculated as CPIH
+    rpiReformDrop: 0.009,     // and CPIH has run about 0.9pp below RPI
     bankBase: 0.0375,         // Bank of England base rate
     interestCap: 0.06,        // "prevailing market rate" cap, in force to Aug 2027
     interestCapUntil: 2027,   // the last tax year that cap has been announced for
@@ -161,27 +173,48 @@
    * sliding scale, and only once you have left the course.
    * -------------------------------------------------------------------- */
 
+  /* One number for RPI from now until the 2060s is a guess wearing a fact's
+     clothes, and it hides a dated, decided change. The years already published
+     are used as published. After them the long-run assumption stands — until
+     February 2030, when RPI stops being RPI: the UK Statistics Authority's
+     2020 decision has it calculated as CPIH from that point, and CPIH has run
+     around 0.9 percentage points below. For a loan charged RPI and nothing
+     else that is the single largest thing anyone knows about its future. */
+  function rpiFor(a, taxYear) {
+    var known = a.rpiKnown;
+    if (taxYear == null) return a.rpi;
+    if (known) {
+      if (known[taxYear] != null) return known[taxYear];
+      var years = Object.keys(known).map(Number).sort(function (x, y) { return x - y; });
+      if (years.length && taxYear < years[0]) return known[years[0]];
+    }
+    var r = a.rpi;
+    if (a.rpiReformYear != null && taxYear >= a.rpiReformYear) r -= (a.rpiReformDrop || 0);
+    return Math.max(r, 0);
+  }
+
   function interestRate(recipe, opts) {
     var a = opts.assumptions;
+    var rpi = rpiFor(a, opts.taxYear);
     var r;
     switch (recipe) {
       case "rpi":
-        r = a.rpi;
+        r = rpi;
         break;
       case "rpiPlus3":
-        r = a.rpi + 0.03;
+        r = rpi + 0.03;
         break;
       case "lowerOfRpiAndBase":
-        r = Math.min(a.rpi, a.bankBase + 0.01);
+        r = Math.min(rpi, a.bankBase + 0.01);
         break;
       case "slidingScale": {
         var lo = opts.threshold, hi = opts.upperThreshold;
         var frac = hi > lo ? clamp((opts.income - lo) / (hi - lo), 0, 1) : 0;
-        r = a.rpi + 0.03 * frac;
+        r = rpi + 0.03 * frac;
         break;
       }
       default:
-        r = a.rpi;
+        r = rpi;
     }
     // The "prevailing market rate" cap is announced a year at a time. Past
     // the year it has been announced for, the statutory rate stands.
@@ -852,6 +885,7 @@
     opportunity: opportunity,
     breakEvenSavings: breakEvenSavings,
     thresholdFor: thresholdFor,
+    rpiFor: rpiFor,
     upperThresholdFor: upperThresholdFor,
     interestRate: interestRate,
     monthlyDeduction: monthlyDeduction,

@@ -107,21 +107,44 @@ test("an undergraduate plan and a postgraduate loan both bite at once", function
 console.log("\nInterest");
 
 test("Plan 5 charges RPI and nothing more", function () {
-  near(E.interestRate("rpi", { assumptions: A, taxYear: 2030 }), 0.041, 1e-9, "Plan 5 rate");
+  near(E.interestRate("rpi", { assumptions: A, taxYear: 2029 }), 0.041, 1e-9, "Plan 5 rate");
+});
+
+test("RPI is what was published for a year that has one", function () {
+  near(E.rpiFor(A, 2025), 0.032, 1e-9, "March 2025, as published");
+  near(E.rpiFor(A, 2026), 0.041, 1e-9, "March 2026, as published");
+  near(E.rpiFor(A, 2020), 0.032, 1e-9, "before the table, the first figure stands");
+  near(E.rpiFor(A, 2029), A.rpi, 1e-9, "past it, the long-run assumption");
+});
+
+test("from 2030 RPI is CPIH, and drops by the gap between them", function () {
+  near(E.rpiFor(A, 2029), 0.041, 1e-9, "the year before, unchanged");
+  near(E.rpiFor(A, 2030), 0.041 - 0.009, 1e-9, "the year of the reform");
+  near(E.rpiFor(A, 2055), 0.041 - 0.009, 1e-9, "and every year after it");
+  var a = Object.assign({}, A, { rpiReformYear: null });
+  near(E.rpiFor(a, 2055), 0.041, 1e-9, "turn the reform off and it never lands");
+  var b = Object.assign({}, A, { rpi: 0.005 });
+  near(E.rpiFor(b, 2040), 0, 1e-9, "the drop cannot take the rate below zero");
+});
+
+test("a rate charged after the reform follows RPI down", function () {
+  near(E.interestRate("rpi", { assumptions: A, taxYear: 2030 }), 0.032, 1e-9, "Plan 5 after");
+  var a = Object.assign({}, A, { interestCap: null });
+  near(E.interestRate("rpiPlus3", { assumptions: a, taxYear: 2030 }), 0.062, 1e-9, "postgraduate after");
 });
 
 test("Plan 1 and Plan 4 take the lower of RPI and base + 1%", function () {
   var a = Object.assign({}, A, { rpi: 0.041, bankBase: 0.0375 });
-  near(E.interestRate("lowerOfRpiAndBase", { assumptions: a, taxYear: 2030 }), 0.041, 1e-9, "RPI is lower");
+  near(E.interestRate("lowerOfRpiAndBase", { assumptions: a, taxYear: 2029 }), 0.041, 1e-9, "RPI is lower");
   var b = Object.assign({}, A, { rpi: 0.08, bankBase: 0.03, interestCap: null });
-  near(E.interestRate("lowerOfRpiAndBase", { assumptions: b, taxYear: 2030 }), 0.04, 1e-9, "base + 1% is lower");
+  near(E.interestRate("lowerOfRpiAndBase", { assumptions: b, taxYear: 2029 }), 0.04, 1e-9, "base + 1% is lower");
 });
 
 test("Plan 2 slides from RPI to RPI + 3% across the income band", function () {
   var a = Object.assign({}, A, { rpi: 0.041, interestCap: null });
   var at = function (income) {
     return E.interestRate("slidingScale", {
-      assumptions: a, income: income, threshold: 29385, upperThreshold: 49130, taxYear: 2030
+      assumptions: a, income: income, threshold: 29385, upperThreshold: 49130, taxYear: 2029
     });
   };
   near(at(20000), 0.041, 1e-9, "below the threshold — RPI only");

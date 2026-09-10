@@ -986,6 +986,16 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   .grp + .grp { border-top: 1px solid var(--line); }
 }
 
+
+/* A chart inside a section takes the row, not one 250px column of it. */
+.grp > .sub, .grp > .sub__note, .grp > .viz, .grp > .key { grid-column: 1 / -1; }
+.grp > .viz { max-width: 100%; }
+.grp > .key { margin-top: .1rem; }
+
+
+/* The line under a sub-heading explains what follows it, so it reads across. */
+.grp > .sub + .note { grid-column: 1 / -1; }
+
 </style>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
@@ -1203,9 +1213,18 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
         <div class="fold">
           <div class="ctl">
             <div class="ctl__top">
-              <label for="rpi">RPI</label>
+              <label for="rpi">RPI, long run</label>
               <span class="ctl__val"><input type="number" id="rpi" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><i>%</i></span>
             </div>
+            <p class="note">2025/26 and 2026/27 are already published and are used as published.</p>
+          </div>
+
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="rpiReformDrop">RPI → CPIH in 2030, by</label>
+              <span class="ctl__val"><input type="number" id="rpiReformDrop" min="0" max="5" step="0.1" value="0.9" data-slider="0,3,0.1" /><i>pp</i></span>
+            </div>
+            <p class="note">From February 2030 RPI is calculated as CPIH, which has run about 0.9 points below it. Set it to zero to model no change.</p>
           </div>
           <div class="ctl">
             <div class="ctl__top">
@@ -1229,6 +1248,11 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
           </div>
           <label class="check"><input type="checkbox" id="useCap" checked /> <span>Apply the announced 6% cap</span></label>
         </div>
+
+        <h4 class="sub">The rate, year by year</h4>
+        <p class="note" id="rateNote"></p>
+        <div id="rateChart" class="viz"></div>
+        <p class="key" id="rateKey"></p>
       </section>
 
     </form>
@@ -1286,13 +1310,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
           <p>The figure you would notice on a payslip.</p></figcaption>
         <div id="monthlyChart" class="viz"></div>
         <p class="key" id="monthlyKey"></p>
-      </figure>
-
-      <figure class="card">
-        <figcaption><h3>Interest rate charged</h3>
-          <p id="rateNote"></p></figcaption>
-        <div id="rateChart" class="viz"></div>
-        <p class="key" id="rateKey"></p>
       </figure>
 
       <figure class="card card--wide focus" id="focusCard">
@@ -1492,8 +1509,20 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     }
   };
 
+  /* RPI already published. Student loan interest is set each September from
+     the RPI of the previous March, so a figure here is the March RPI that
+     governs the tax year it is keyed by — settled, not assumed.
+     Read 10 September 2026. */
+  var RPI_KNOWN = {
+    2025: 0.032,              // March 2025 RPI, set rates from 1 Sep 2025
+    2026: 0.041               // March 2026 RPI, sets rates from 1 Sep 2026
+  };
+
   var DEFAULT_ASSUMPTIONS = {
-    rpi: 0.041,               // March 2026 RPI, sets rates from 1 Sep 2026
+    rpi: 0.041,               // long-run RPI on the method in use today
+    rpiKnown: RPI_KNOWN,      // the years that are not a guess at all
+    rpiReformYear: 2030,      // from Feb 2030 RPI is calculated as CPIH
+    rpiReformDrop: 0.009,     // and CPIH has run about 0.9pp below RPI
     bankBase: 0.0375,         // Bank of England base rate
     interestCap: 0.06,        // "prevailing market rate" cap, in force to Aug 2027
     interestCapUntil: 2027,   // the last tax year that cap has been announced for
@@ -1564,27 +1593,48 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
    * sliding scale, and only once you have left the course.
    * -------------------------------------------------------------------- */
 
+  /* One number for RPI from now until the 2060s is a guess wearing a fact's
+     clothes, and it hides a dated, decided change. The years already published
+     are used as published. After them the long-run assumption stands — until
+     February 2030, when RPI stops being RPI: the UK Statistics Authority's
+     2020 decision has it calculated as CPIH from that point, and CPIH has run
+     around 0.9 percentage points below. For a loan charged RPI and nothing
+     else that is the single largest thing anyone knows about its future. */
+  function rpiFor(a, taxYear) {
+    var known = a.rpiKnown;
+    if (taxYear == null) return a.rpi;
+    if (known) {
+      if (known[taxYear] != null) return known[taxYear];
+      var years = Object.keys(known).map(Number).sort(function (x, y) { return x - y; });
+      if (years.length && taxYear < years[0]) return known[years[0]];
+    }
+    var r = a.rpi;
+    if (a.rpiReformYear != null && taxYear >= a.rpiReformYear) r -= (a.rpiReformDrop || 0);
+    return Math.max(r, 0);
+  }
+
   function interestRate(recipe, opts) {
     var a = opts.assumptions;
+    var rpi = rpiFor(a, opts.taxYear);
     var r;
     switch (recipe) {
       case "rpi":
-        r = a.rpi;
+        r = rpi;
         break;
       case "rpiPlus3":
-        r = a.rpi + 0.03;
+        r = rpi + 0.03;
         break;
       case "lowerOfRpiAndBase":
-        r = Math.min(a.rpi, a.bankBase + 0.01);
+        r = Math.min(rpi, a.bankBase + 0.01);
         break;
       case "slidingScale": {
         var lo = opts.threshold, hi = opts.upperThreshold;
         var frac = hi > lo ? clamp((opts.income - lo) / (hi - lo), 0, 1) : 0;
-        r = a.rpi + 0.03 * frac;
+        r = rpi + 0.03 * frac;
         break;
       }
       default:
-        r = a.rpi;
+        r = rpi;
     }
     // The "prevailing market rate" cap is announced a year at a time. Past
     // the year it has been announced for, the statutory rate stands.
@@ -2255,6 +2305,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     opportunity: opportunity,
     breakEvenSavings: breakEvenSavings,
     thresholdFor: thresholdFor,
+    rpiFor: rpiFor,
     upperThresholdFor: upperThresholdFor,
     interestRate: interestRate,
     monthlyDeduction: monthlyDeduction,
@@ -2389,6 +2440,9 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   function assumptions() {
     return {
       rpi: num("rpi", 4.1) / 100,
+      rpiKnown: E.DEFAULT_ASSUMPTIONS.rpiKnown,
+      rpiReformYear: E.DEFAULT_ASSUMPTIONS.rpiReformYear,
+      rpiReformDrop: num("rpiReformDrop", 0.9) / 100,
       bankBase: num("bankBase", 3.75) / 100,
       thresholdGrowth: num("thresholdGrowth", 3) / 100,
       inflation: num("inflation", 4.1) / 100,
@@ -3407,10 +3461,10 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
    * space it is given, and comes out at the height it was drawn for.
    * ---------------------------------------------------------------------- */
 
-  function vizW(hostId, h, drawn) {
+  function vizW(hostId, h, drawn, targetPx) {
     var el = $(hostId), px = el ? el.clientWidth : 0;
     if (!px) return drawn;                    // not laid out yet; keep as drawn
-    var tall = Math.max(190, Math.min(270, Math.round(px * 0.26)));
+    var tall = targetPx || Math.max(190, Math.min(270, Math.round(px * 0.26)));
     return Math.round(h * px / tall);
   }
 
@@ -3573,6 +3627,19 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
   /* ---- 4. the interest rate --------------------------------------------- */
 
+  // One profile can carry two loans at two different rates, told apart only
+  // by a dash. The key that named profiles could not say which was which.
+  function rateSeriesKey(series) {
+    return series.map(function (S) {
+      return '<i style="color:' + S.meta.colour + '">' +
+        (S.dash ? "\u254c " : "\u2014 ") + S.label + "</i>";
+    }).join("");
+  }
+
+  // Drawn at the height it is shown at, rather than drawn tall and squeezed:
+  // squeezing takes the axis labels down with it, and 11px becomes 7px.
+  var RATE_H = 175;
+
   function renderRateChart(runs) {
     var a = runs[0].assumptions;
     var series = [];
@@ -3591,10 +3658,26 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     series.forEach(function (S) { S.pts.forEach(function (p) { max = Math.max(max, p.v); }); });
     var top = Math.ceil(max * 100 + 0.5) / 100;
     var f = spanFrame(runs, series, function (v) { return (v * 100).toFixed(0) + "%"; },
-                      "Interest rate charged by tax year", vizW("rateChart", 260, 440), 260, true, { top: top, step: top > 0.08 ? 0.02 : 0.01 });
+                      "Interest rate charged by tax year",
+                      vizW("rateChart", RATE_H, 440, RATE_H), RATE_H, true,
+                      { top: top, step: top > 0.08 ? 0.02 : 0.01 });
 
-    var rpiLine = '<line x1="' + f.ml + '" y1="' + f.y(a.rpi).toFixed(1) + '" x2="' + (f.W - 14) +
-      '" y2="' + f.y(a.rpi).toFixed(1) + '" stroke="var(--ink-4)" stroke-width="1" stroke-dasharray="2 4"/>';
+    // RPI is a path, not a number: published where it is published, the
+    // long-run assumption after that, and a step down where the 2030 reform
+    // turns it into CPIH. Drawn as a line, because that is what it is.
+    var years = (series[0] && series[0].pts) ? series[0].pts : [];
+    // On a plan charged RPI and nothing else the reference line lies exactly
+    // under the charged one, and reads as the charged line turning dotted
+    // wherever the loan ends. Draw it only where something differs from it.
+    var differs = series.some(function (S) {
+      return S.pts.some(function (p) { return Math.abs(p.v - E.rpiFor(a, p.taxYear)) > 1e-9; });
+    });
+    var rpiLine = years.length && differs
+      ? '<path d="' + years.map(function (p, i) {
+            return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " +
+                   f.y(E.rpiFor(a, p.taxYear)).toFixed(1);
+          }).join(" ") + '" fill="none" stroke="var(--ink-4)" stroke-width="1.25" stroke-dasharray="3 4"/>'
+      : "";
 
     var body = series.map(function (S) {
       var d = "", prev = null;
@@ -3609,7 +3692,12 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     }).join("");
 
     $("rateChart").innerHTML = f.open + rpiLine + body + cutoffMarks(runs, f, { label: false }) + f.close;
-    $("rateKey").innerHTML = runKeys(runs) + '<i style="color:var(--ink-4)">RPI, ' + pct(a.rpi) + "</i>";
+    var rk = $("rateKey");
+    if (rk) rk.innerHTML = rateSeriesKey(series) +
+      (differs
+        ? '<i style="color:var(--ink-4)">RPI as assumed, ' + pct(E.rpiFor(a, 2029)) +
+          " to " + pct(E.rpiFor(a, a.rpiReformYear || 2030)) + " from 2030</i>"
+        : "");
     $("rateNote").textContent = rateExplanation(runs[0]);
   }
 
@@ -4238,7 +4326,10 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
   function rateExplanation(sim) {
     var a = sim.assumptions;
-    var yrs = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
+    // Every year the loan bears interest, not only the years you are paying
+    // it: interest runs from the first instalment, and the rate charged
+    // during the course is as much a fact about the loan as any other.
+    var yrs = sim.combined.years.filter(function (y) { return y.rateHigh != null; });
     if (!yrs.length) return "";
     var lo = Math.min.apply(null, yrs.map(function (y) { return y.rateLow; }));
     var hi = Math.max.apply(null, yrs.map(function (y) { return y.rateHigh; }));
@@ -4251,13 +4342,23 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       plan4: "Plan 4 takes the lower of RPI and the base rate + 1%."
     }[$("plan").value] || "";
 
-    // Only worth mentioning where it actually bites.
-    var capped = (a.interestCap != null && hi > a.interestCap + 1e-9)
+    // Only worth mentioning where it actually held a rate down. Asking
+    // whether any rate is above the cap said yes for a postgraduate loan
+    // that had not started by the time the cap lapsed.
+    var bit = yrs.some(function (y) {
+      return a.interestCap != null && a.interestCapUntil != null &&
+             y.taxYear <= a.interestCapUntil && y.rateHigh >= a.interestCap - 1e-9;
+    });
+    var capped = bit
       ? " The announced " + pct(a.interestCap, 0) + " cap holds it down to " +
         E.taxYearLabel(a.interestCapUntil) + ", then lapses."
       : "";
+    var reform = a.rpiReformYear && a.rpiReformDrop
+      ? " It steps down in " + a.rpiReformYear +
+        ", when RPI starts being calculated as CPIH."
+      : "";
 
-    return "Charged at " + range + ". " + why + capped;
+    return "Charged at " + range + ". " + why + reform + capped;
   }
 
   /* ---- the years, on a line ---------------------------------------------- *
@@ -4941,6 +5042,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     // A section that owns a chart has to draw it now it has a width.
     if (hdrGrps[i].el.querySelector("#drawChart")) buildIncomeChart();
     if (hdrGrps[i].el.querySelector("#tlTrack")) renderTimelineTrack();
+    if (hdrGrps[i].el.querySelector("#rateChart") && lastRuns) renderRateChart(lastRuns);
     fitSliders();
     syncSliders();
   }

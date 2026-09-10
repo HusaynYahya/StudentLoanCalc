@@ -117,6 +117,9 @@
   function assumptions() {
     return {
       rpi: num("rpi", 4.1) / 100,
+      rpiKnown: E.DEFAULT_ASSUMPTIONS.rpiKnown,
+      rpiReformYear: E.DEFAULT_ASSUMPTIONS.rpiReformYear,
+      rpiReformDrop: num("rpiReformDrop", 0.9) / 100,
       bankBase: num("bankBase", 3.75) / 100,
       thresholdGrowth: num("thresholdGrowth", 3) / 100,
       inflation: num("inflation", 4.1) / 100,
@@ -1135,10 +1138,10 @@
    * space it is given, and comes out at the height it was drawn for.
    * ---------------------------------------------------------------------- */
 
-  function vizW(hostId, h, drawn) {
+  function vizW(hostId, h, drawn, targetPx) {
     var el = $(hostId), px = el ? el.clientWidth : 0;
     if (!px) return drawn;                    // not laid out yet; keep as drawn
-    var tall = Math.max(190, Math.min(270, Math.round(px * 0.26)));
+    var tall = targetPx || Math.max(190, Math.min(270, Math.round(px * 0.26)));
     return Math.round(h * px / tall);
   }
 
@@ -1301,6 +1304,19 @@
 
   /* ---- 4. the interest rate --------------------------------------------- */
 
+  // One profile can carry two loans at two different rates, told apart only
+  // by a dash. The key that named profiles could not say which was which.
+  function rateSeriesKey(series) {
+    return series.map(function (S) {
+      return '<i style="color:' + S.meta.colour + '">' +
+        (S.dash ? "\u254c " : "\u2014 ") + S.label + "</i>";
+    }).join("");
+  }
+
+  // Drawn at the height it is shown at, rather than drawn tall and squeezed:
+  // squeezing takes the axis labels down with it, and 11px becomes 7px.
+  var RATE_H = 175;
+
   function renderRateChart(runs) {
     var a = runs[0].assumptions;
     var series = [];
@@ -1319,10 +1335,26 @@
     series.forEach(function (S) { S.pts.forEach(function (p) { max = Math.max(max, p.v); }); });
     var top = Math.ceil(max * 100 + 0.5) / 100;
     var f = spanFrame(runs, series, function (v) { return (v * 100).toFixed(0) + "%"; },
-                      "Interest rate charged by tax year", vizW("rateChart", 260, 440), 260, true, { top: top, step: top > 0.08 ? 0.02 : 0.01 });
+                      "Interest rate charged by tax year",
+                      vizW("rateChart", RATE_H, 440, RATE_H), RATE_H, true,
+                      { top: top, step: top > 0.08 ? 0.02 : 0.01 });
 
-    var rpiLine = '<line x1="' + f.ml + '" y1="' + f.y(a.rpi).toFixed(1) + '" x2="' + (f.W - 14) +
-      '" y2="' + f.y(a.rpi).toFixed(1) + '" stroke="var(--ink-4)" stroke-width="1" stroke-dasharray="2 4"/>';
+    // RPI is a path, not a number: published where it is published, the
+    // long-run assumption after that, and a step down where the 2030 reform
+    // turns it into CPIH. Drawn as a line, because that is what it is.
+    var years = (series[0] && series[0].pts) ? series[0].pts : [];
+    // On a plan charged RPI and nothing else the reference line lies exactly
+    // under the charged one, and reads as the charged line turning dotted
+    // wherever the loan ends. Draw it only where something differs from it.
+    var differs = series.some(function (S) {
+      return S.pts.some(function (p) { return Math.abs(p.v - E.rpiFor(a, p.taxYear)) > 1e-9; });
+    });
+    var rpiLine = years.length && differs
+      ? '<path d="' + years.map(function (p, i) {
+            return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " +
+                   f.y(E.rpiFor(a, p.taxYear)).toFixed(1);
+          }).join(" ") + '" fill="none" stroke="var(--ink-4)" stroke-width="1.25" stroke-dasharray="3 4"/>'
+      : "";
 
     var body = series.map(function (S) {
       var d = "", prev = null;
@@ -1337,7 +1369,12 @@
     }).join("");
 
     $("rateChart").innerHTML = f.open + rpiLine + body + cutoffMarks(runs, f, { label: false }) + f.close;
-    $("rateKey").innerHTML = runKeys(runs) + '<i style="color:var(--ink-4)">RPI, ' + pct(a.rpi) + "</i>";
+    var rk = $("rateKey");
+    if (rk) rk.innerHTML = rateSeriesKey(series) +
+      (differs
+        ? '<i style="color:var(--ink-4)">RPI as assumed, ' + pct(E.rpiFor(a, 2029)) +
+          " to " + pct(E.rpiFor(a, a.rpiReformYear || 2030)) + " from 2030</i>"
+        : "");
     $("rateNote").textContent = rateExplanation(runs[0]);
   }
 
@@ -1966,7 +2003,10 @@
 
   function rateExplanation(sim) {
     var a = sim.assumptions;
-    var yrs = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
+    // Every year the loan bears interest, not only the years you are paying
+    // it: interest runs from the first instalment, and the rate charged
+    // during the course is as much a fact about the loan as any other.
+    var yrs = sim.combined.years.filter(function (y) { return y.rateHigh != null; });
     if (!yrs.length) return "";
     var lo = Math.min.apply(null, yrs.map(function (y) { return y.rateLow; }));
     var hi = Math.max.apply(null, yrs.map(function (y) { return y.rateHigh; }));
@@ -1979,13 +2019,23 @@
       plan4: "Plan 4 takes the lower of RPI and the base rate + 1%."
     }[$("plan").value] || "";
 
-    // Only worth mentioning where it actually bites.
-    var capped = (a.interestCap != null && hi > a.interestCap + 1e-9)
+    // Only worth mentioning where it actually held a rate down. Asking
+    // whether any rate is above the cap said yes for a postgraduate loan
+    // that had not started by the time the cap lapsed.
+    var bit = yrs.some(function (y) {
+      return a.interestCap != null && a.interestCapUntil != null &&
+             y.taxYear <= a.interestCapUntil && y.rateHigh >= a.interestCap - 1e-9;
+    });
+    var capped = bit
       ? " The announced " + pct(a.interestCap, 0) + " cap holds it down to " +
         E.taxYearLabel(a.interestCapUntil) + ", then lapses."
       : "";
+    var reform = a.rpiReformYear && a.rpiReformDrop
+      ? " It steps down in " + a.rpiReformYear +
+        ", when RPI starts being calculated as CPIH."
+      : "";
 
-    return "Charged at " + range + ". " + why + capped;
+    return "Charged at " + range + ". " + why + reform + capped;
   }
 
   /* ---- the years, on a line ---------------------------------------------- *
@@ -2669,6 +2719,7 @@
     // A section that owns a chart has to draw it now it has a width.
     if (hdrGrps[i].el.querySelector("#drawChart")) buildIncomeChart();
     if (hdrGrps[i].el.querySelector("#tlTrack")) renderTimelineTrack();
+    if (hdrGrps[i].el.querySelector("#rateChart") && lastRuns) renderRateChart(lastRuns);
     fitSliders();
     syncSliders();
   }
