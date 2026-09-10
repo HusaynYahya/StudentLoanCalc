@@ -85,8 +85,11 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -.01em; }
     grid-template-columns: var(--panel-w) minmax(0, 1fr);
     height: 100vh;
   }
-  .panel { height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
-  .main  { height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
+  /* Both are containing blocks as well as scroll boxes: an absolutely
+     positioned child of a static scroller escapes to the page itself and
+     drags the document out to its own depth, leaving dead space below. */
+  .panel { height: 100vh; overflow-y: auto; overscroll-behavior: contain; position: relative; }
+  .main  { height: 100vh; overflow-y: auto; overscroll-behavior: contain; position: relative; }
 }
 
 /* ---- control panel ----------------------------------------------------- */

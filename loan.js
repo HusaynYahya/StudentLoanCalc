@@ -1128,6 +1128,21 @@
 
   // Shared axes. `fmt` turns a value into an axis label; `years` are the rows
   // being plotted, thinned so the labels never collide.
+  /* ---- how wide to draw ---------------------------------------------------
+   * These charts are drawn once and stretched to whatever the card is. A
+   * frame drawn 440 across and shown over 1,086px of card is the whole chart
+   * at two and a half times its intended size: 11px axis labels land at 27px,
+   * and a single card fills the screen. So the drawing widens to match the
+   * space it is given, and comes out at the height it was drawn for.
+   * ---------------------------------------------------------------------- */
+
+  function vizW(hostId, h, drawn) {
+    var el = $(hostId), px = el ? el.clientWidth : 0;
+    if (!px) return drawn;                    // not laid out yet; keep as drawn
+    var tall = Math.max(230, Math.min(360, Math.round(px * 0.34)));
+    return Math.round(h * px / tall);
+  }
+
   function frame(o) {
     var W = o.w || 760, H = o.h || 240;
     var ml = o.ml == null ? (W < 600 ? 44 : 54) : o.ml;
@@ -1197,7 +1212,7 @@
         cutoff: repayStartYear() + E.RULES[sim.settings.plan].writeOffYears
       };
     });
-    var f = spanFrame(runs, series, gbpShort, "Balance outstanding by tax year", 760, 300, true);
+    var f = spanFrame(runs, series, gbpShort, "Balance outstanding by tax year", vizW("chart", 300, 760), 300, true);
 
     var body = series.map(function (S) {
       var path = '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour +
@@ -1237,7 +1252,7 @@
     if (!series.length || !series[0].pts.length) { $("salaryChart").innerHTML = ""; return; }
 
     var all = series.map(function (S) { return { pts: S.pts.concat(S.thr) }; });
-    var f = spanFrame(runs, all, gbpShort, "Gross salary against the repayment threshold", 440, 260, false);
+    var f = spanFrame(runs, all, gbpShort, "Gross salary against the repayment threshold", vizW("salaryChart", 260, 440), 260, false);
 
     var body = series.map(function (S) {
       var band = S.pts.map(function (p, i) {
@@ -1268,7 +1283,7 @@
     if (!series.length || !series[0].pts.length) { $("monthlyChart").innerHTML = ""; return; }
 
     var f = spanFrame(runs, series, function (v) { return "£" + Math.round(v); },
-                      "Monthly repayment by tax year", 440, 260, true);
+                      "Monthly repayment by tax year", vizW("monthlyChart", 260, 440), 260, true);
 
     var body = series.map(function (S) {
       return '<path d="' + area(S.pts, f) + '" fill="' + S.meta.colour + '" opacity=".10"/>' +
@@ -1305,7 +1320,7 @@
     series.forEach(function (S) { S.pts.forEach(function (p) { max = Math.max(max, p.v); }); });
     var top = Math.ceil(max * 100 + 0.5) / 100;
     var f = spanFrame(runs, series, function (v) { return (v * 100).toFixed(0) + "%"; },
-                      "Interest rate charged by tax year", 440, 260, true, { top: top, step: top > 0.08 ? 0.02 : 0.01 });
+                      "Interest rate charged by tax year", vizW("rateChart", 260, 440), 260, true, { top: top, step: top > 0.08 ? 0.02 : 0.01 });
 
     var rpiLine = '<line x1="' + f.ml + '" y1="' + f.y(a.rpi).toFixed(1) + '" x2="' + (f.W - 14) +
       '" y2="' + f.y(a.rpi).toFixed(1) + '" stroke="var(--ink-4)" stroke-width="1" stroke-dasharray="2 4"/>';
@@ -1393,7 +1408,7 @@
         return { taxYear: y.taxYear, label: y.label, v: cum };
       }) };
     });
-    var f = spanFrame(runs, series, gbpShort, "Total handed over, accumulating, by tax year", 760, 280, true);
+    var f = spanFrame(runs, series, gbpShort, "Total handed over, accumulating, by tax year", vizW("costChart", 280, 760), 280, true);
 
     var body = series.map(function (S) {
       return '<path d="' + area(S.pts, f) + '" fill="' + S.meta.colour + '" opacity=".08"/>' +
@@ -1792,7 +1807,7 @@
     pts.forEach(function (p) { max = Math.max(max, p.v, p.w); });
     var s = niceScale(max);
     var f = frame({ years: pts, xMin: pts[0].taxYear, xMax: pts[pts.length - 1].taxYear,
-                    top: s.top, step: s.step, fmt: gbpShort, w: 760, h: 260,
+                    top: s.top, step: s.step, fmt: gbpShort, w: vizW("oppChart", 260, 760), h: 260,
                     title: "Repaying as required against clearing the balance today and saving" });
 
     var lineW = pts.map(function (p, i) {
