@@ -1532,8 +1532,9 @@
         k: "Total repayment",
         v: gbp(r.totalRepaid),
         sub: r.everRepaidInFull
-          ? "cash handed over, cleared in " + r.clearedLabel
-          : "cash handed over before " + gbp(r.writtenOff) + " was written off",
+          ? "total repayment paid. Loan paid back in " + r.clearedLabel
+          : "total repayment paid. Loan never cleared \u2014 " +
+            gbp(r.writtenOff) + " written off in " + endYearLabel,
         tone: ""
       },
       {
