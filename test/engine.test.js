@@ -408,14 +408,15 @@ test("with no savings rate at all it is a straight cash comparison", function ()
   near(o.fvRepayments, r.totalRepaid, 1, "so the stream is just the cash total");
 });
 
-test("the track has a row per repaying year, both choices side by side", function () {
+test("the track has a row per repaying year, the pot only growing", function () {
   var s = withSalary(60000);
   var repaying = s.combined.years.filter(function (y) { return y.phase === "repaying"; });
   eq(s.opportunity.track.length, repaying.length, "one row per repaying year");
   var last = s.opportunity.track[s.opportunity.track.length - 1];
-  ok(last.lumpGrown > 0 && last.repaymentsSaved > 0, "both series are populated");
+  ok(last.repaymentsSaved > 0, "the series is populated");
   for (var i = 1; i < s.opportunity.track.length; i++) {
-    ok(s.opportunity.track[i].lumpGrown >= s.opportunity.track[i - 1].lumpGrown, "the kept lump only grows");
+    ok(s.opportunity.track[i].repaymentsSaved >= s.opportunity.track[i - 1].repaymentsSaved,
+       "money paid in and left alone never shrinks");
   }
 });
 

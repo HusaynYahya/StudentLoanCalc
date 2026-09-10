@@ -1790,39 +1790,56 @@
         })();
   }
 
-  /* ---- the two choices, racing --------------------------------------------
-   * One line is the repayments piling up with interest you never earned; the
-   * other is the balance you did not clear, growing. Where they cross is the
-   * moment one choice overtakes the other.
+  /* ---- the fees against the pot -------------------------------------------
+   * One line is what the degree costs if you find the money yourself: the
+   * fees and living costs as they fall due, then flat for the rest of your
+   * life. The other is what you would be holding if every repayment went
+   * into a savings account instead. Where the second passes the first is the
+   * year the saved repayments outgrow the bill they replaced.
    * ---------------------------------------------------------------------- */
 
   function renderOppChart(sim) {
     var o = sim.opportunity;
     if (!o.track.length) { $("oppChart").innerHTML = ""; $("oppKey").innerHTML = ""; return; }
 
-    var pts = o.track.map(function (t) {
-      return { taxYear: t.taxYear, label: t.label, v: t.repaymentsSaved, w: t.lumpGrown };
+    // The pot, by the year it reaches that size.
+    var saved = {};
+    o.track.forEach(function (t) { saved[t.taxYear] = t.repaymentsSaved; });
+
+    // The bill, as it falls due. It stops rising the day the course does.
+    var pts = [], bill = 0, crossed = null;
+    sim.combined.years.forEach(function (y) {
+      bill = y.cumBorrowed;
+      var pot = saved[y.taxYear] || 0;
+      pts.push({ taxYear: y.taxYear, label: y.label, v: pot, bill: bill });
+      if (crossed == null && pot > bill && bill > 0) crossed = y.label;
     });
+    if (pts.length < 2) { $("oppChart").innerHTML = ""; $("oppKey").innerHTML = ""; return; }
+
     var max = 0;
-    pts.forEach(function (p) { max = Math.max(max, p.v, p.w); });
+    pts.forEach(function (p) { max = Math.max(max, p.v, p.bill); });
     var s = niceScale(max);
     var f = frame({ years: pts, xMin: pts[0].taxYear, xMax: pts[pts.length - 1].taxYear,
                     top: s.top, step: s.step, fmt: gbpShort, w: vizW("oppChart", 260, 760), h: 260,
-                    title: "Repaying as required against clearing the balance today and saving" });
+                    title: "The fees paid in cash against the repayments saved instead" });
 
-    var lineW = pts.map(function (p, i) {
-      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p.w).toFixed(1);
+    var billLine = pts.map(function (p, i) {
+      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p.bill).toFixed(1);
     }).join(" ");
 
     $("oppChart").innerHTML = f.open +
+      '<path d="' + billLine + '" fill="none" stroke="var(--warn)" stroke-width="2.25"/>' +
       '<path d="' + line(pts, f) + '" fill="none" stroke="var(--good)" stroke-width="2.25"/>' +
-      '<path d="' + lineW + '" fill="none" stroke="var(--warn)" stroke-width="2.25" stroke-dasharray="5 4"/>' +
       f.close;
 
     $("oppKey").innerHTML =
-      '<i style="color:var(--good)">Your repayments, saved instead</i>' +
-      '<i class="k-int">The balance you did not settle, saved instead at ' + pct(o.savingsRate) + "</i>" +
-      '<i style="color:var(--ink-4)">whichever is lower is the cheaper choice</i>';
+      '<i style="color:var(--warn)">' + (state.loanMode === "balance"
+        ? "The balance, cleared outright"
+        : "The fees and living costs, paid in cash") + " \u2014 " + gbp(o.upfrontPaid) + "</i>" +
+      '<i style="color:var(--good)">Your repayments, saved instead at ' + pct(o.savingsRate) + "</i>" +
+      (crossed
+        ? '<i style="color:var(--ink-4)">the pot passes the bill in ' + crossed + "</i>"
+        : '<i style="color:var(--ink-4)">the pot never reaches the bill</i>');
   }
 
   /* ---- the hard cut-off --------------------------------------------------- *

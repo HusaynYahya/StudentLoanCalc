@@ -647,8 +647,7 @@
       track.push({
         taxYear: y.taxYear,
         label: y.label,
-        repaymentsSaved: running,                                  // the stream, compounding
-        lumpGrown: lump * Math.pow(1 + s, y.taxYear - startYear + 1) // the balance, left to grow
+        repaymentsSaved: running                                   // the stream, compounding
       });
     });
 
