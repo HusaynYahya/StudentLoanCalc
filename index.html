@@ -6,7 +6,7 @@
 <meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
 <meta name="color-scheme" content="dark" />
 <title>Student loan · repayment model</title>
-<link rel="stylesheet" href="loan.css?v=6a36824d" />
+<link rel="stylesheet" href="loan.css?v=eb603acc" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -17,7 +17,6 @@
   <!-- ==================================================================== -->
   <!-- CONTROLS — a wide header you scroll through, a section at a time      -->
   <!-- ==================================================================== -->
-  <div class="hdrwrap" id="hdrWrap">
   <aside class="panel" id="panel" aria-label="Controls">
 
     <header class="panel__head">
@@ -25,13 +24,13 @@
         <p class="brand">UK&nbsp;student&nbsp;finance</p>
         <h1>Repayment model</h1>
       </div>
-      <nav class="hdrnav" id="hdrNav" aria-label="Control sections"></nav>
+      <button type="button" id="panelToggle" class="panel__toggle" aria-expanded="true">← Hide controls</button>
     </header>
 
     <form id="form" novalidate>
 
       <!-- ---- scenarios ---- -->
-      <section class="grp grp--scen" id="grp-compare" data-grp="Compare">
+      <section class="grp grp--scen">
         <div class="grp__head"><h2>Compare</h2></div>
         <div class="scens" id="scenTabs" role="tablist" aria-label="Scenarios"></div>
         <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">Compare with paying upfront</span></label>
@@ -40,7 +39,7 @@
       </section>
 
       <!-- ---- income profile ---- -->
-      <section class="grp" id="grp-income" data-grp="Income">
+      <section class="grp">
         <div class="grp__head">
           <h2>Income <b class="who" id="whoIncome">A</b></h2>
         </div>
@@ -99,7 +98,7 @@
       </section>
 
       <!-- ---- timeline ---- -->
-      <section class="grp" id="grp-timeline" data-grp="Timeline">
+      <section class="grp">
         <div class="grp__head">
           <h2>Timeline</h2>
           <div class="seg" role="tablist" aria-label="How to describe the loan">
@@ -186,7 +185,7 @@
       </section>
 
       <!-- ---- extras ---- -->
-      <section class="grp" id="grp-also" data-grp="Also">
+      <section class="grp">
         <div class="grp__head"><h2>Also</h2></div>
         <div class="ctl">
           <div class="ctl__top">
@@ -204,7 +203,7 @@
       </section>
 
       <!-- ---- savings ---- -->
-      <section class="grp" id="grp-savings" data-grp="Savings">
+      <section class="grp">
         <div class="grp__head"><h2>Savings account</h2></div>
         <div class="ctl">
           <div class="ctl__top">
@@ -218,8 +217,8 @@
       </section>
 
       <!-- ---- assumptions ---- -->
-      <section class="grp" id="grp-assumptions" data-grp="Assumptions">
-        <div class="grp__head"><h2>Assumptions</h2><span class="grp__sub">the unknowables</span></div>
+      <details class="grp grp--fold">
+        <summary><h2>Assumptions</h2><span>the unknowables</span></summary>
         <div class="fold">
           <div class="ctl">
             <div class="ctl__top">
@@ -258,11 +257,10 @@
           </div>
           <label class="check"><input type="checkbox" id="useCap" checked /> <span>Apply the announced 6% cap</span></label>
         </div>
-      </section>
+      </details>
 
     </form>
   </aside>
-  </div>
 
   <!-- ==================================================================== -->
   <!-- RESULTS                                                              -->
@@ -422,7 +420,7 @@
   </main>
 </div>
 
-<script src="engine.js?v=6a36824d"></script>
-<script src="loan.js?v=6a36824d" defer></script>
+<script src="engine.js?v=eb603acc"></script>
+<script src="loan.js?v=eb603acc" defer></script>
 </body>
 </html>

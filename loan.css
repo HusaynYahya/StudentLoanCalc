@@ -48,6 +48,7 @@
   --num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", Consolas, "Liberation Mono", monospace;
 
   --gut: clamp(1rem, 3vw, 2rem);
+  --panel-w: clamp(360px, 32vw, 560px);
   --r: 10px;
 }
 
@@ -79,22 +80,24 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -.01em; }
 
 .app { display: block; }
 
-/* The controls are a wide header rather than a column beside the results.
-   It pins to the top and you walk down it a section at a time; once you are
-   past the last one it closes to its bar, which stays, so the results have
-   the screen and any section is one click away. */
-.hdrwrap { display: contents; }
-.panel {
-  position: sticky; top: 0; z-index: 20;
-  background: var(--bg-2);
-  border-bottom: 1px solid var(--line);
+@media (min-width: 1040px) {
+  .app {
+    display: grid;
+    grid-template-columns: var(--panel-w) minmax(0, 1fr);
+    height: 100vh;
+  }
+  /* Both are containing blocks as well as scroll boxes: an absolutely
+     positioned child of a static scroller escapes to the page itself and
+     drags the document out to its own depth, leaving dead space below. */
+  .panel { height: 100vh; overflow-y: auto; overscroll-behavior: contain; position: relative; }
+  .main  { height: 100vh; overflow-y: auto; overscroll-behavior: contain; position: relative; }
 }
-body.hdr-shut #form { display: none; }
-/* The header changes height as you walk it. Chrome compensates for content
-   resizing above the viewport by moving the scroll position, which moved the
-   walk on to the next section, which resized the header again. */
-body, .panel, #form { overflow-anchor: none; }
-html { scroll-padding-top: 4.5rem; }
+
+.panel {
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+  padding: 0 0 3rem;
+}
 
 /* ---- control panel ----------------------------------------------------- */
 
@@ -270,6 +273,7 @@ select:hover { border-color: var(--ink-4); }
   padding: 1.6rem clamp(1rem, 3vw, 2rem) 1.4rem;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, var(--bg-3), var(--bg));
+  position: sticky; top: 0; z-index: 5;
 }
 .hero__lead { min-width: 0; }
 .hero__label {
@@ -827,62 +831,20 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .sub__note { margin: 0 0 .2rem; font-size: .74rem; color: var(--ink-4); }
 
 
-/* ---- the header, as a walk through the controls ------------------------ */
+/* ---- the controls, two abreast -----------------------------------------
+ * The column is wide enough now that a control does not have to own a whole
+ * row. Everything that reads as one thing — a heading, the timeline, a
+ * sentence — still takes the full width; the rest pairs up.
+ * ---------------------------------------------------------------------- */
 
-.panel__head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 1rem 1.4rem; flex-wrap: wrap;
-  padding: .7rem var(--gut) .55rem;
-  border-bottom: 1px solid var(--line);
-}
-.panel__head h1 { font-size: .98rem; }
-.panel__head .brand { margin-bottom: .1rem; }
-
-.hdrnav { display: flex; flex-wrap: wrap; gap: .25rem; }
-.hdrnav button {
-  border: 1px solid transparent; background: none;
-  color: var(--ink-4); font: inherit; font-size: .76rem; font-weight: 600;
-  letter-spacing: .02em; padding: .3rem .6rem; border-radius: 999px;
-  cursor: pointer; white-space: nowrap;
-}
-.hdrnav button:hover { color: var(--ink-2); background: var(--bg-4); }
-.hdrnav button.is-on {
-  color: var(--live); background: var(--live-g); border-color: var(--live);
-}
-.hdrnav button i {
-  display: inline-block; width: .34rem; height: .34rem; border-radius: 50%;
-  background: currentColor; margin-right: .38rem; vertical-align: .12em;
-  opacity: .5;
-}
-.hdrnav button.is-on i { opacity: 1; }
-
-#form { padding: 0 var(--gut); }
-.grp {
-  border: 0; padding: 0; margin: 0;
-}
-/* Only the section you are on is laid out; the rest are out of the way
-   entirely, so the header keeps one height as you walk down it. */
-.grp[hidden] { display: none !important; }
-.grp__head {
-  display: flex; align-items: baseline; gap: .5rem;
-  justify-content: flex-start; padding: .75rem 0 .1rem;
-}
-/* Only a switch earns the far side of the heading. */
-.grp__head > .seg { margin-left: auto; }
-.grp__head h2 { margin: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
-.grp__sub { font-size: .72rem; color: var(--ink-4); }
-
-/* Inside a section the controls run across the width instead of down a
-   column: a section is a band, not a scroll. Anything that reads as one
-   thing across the page — a heading, a timeline, a sentence — takes the
-   whole row; the rest packs into columns. */
 /* display:grid on a class beats the browser's own [hidden] rule, which is
    how all four income panes ended up on screen at once. */
 [hidden] { display: none !important; }
+
 .grp, .pane, .fold {
   display: grid; align-items: start;
-  gap: .2rem 1.6rem;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: .25rem 1.1rem;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
 .grp > .grp__head, .grp > .readout, .grp > .seg,
 .grp > .check, .grp > .btnrow, .grp > .pane, .grp > .fold,
@@ -895,25 +857,15 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 /* A short aside sits in its column; only a full sentence takes the row. */
 .grp > .note, .pane > .note { grid-column: auto; align-self: start; }
 .grp > .grp__head + .note, #tlNote, #incomeLede { grid-column: 1 / -1; }
-/* The five profiles and the six professions run across a wide page rather
-   than down what used to be a 328px column. */
 .grp > .scens, .pane > .picks, .pane > .readout { grid-column: 1 / -1; }
-.scens, .picks {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-}
+.scens, .picks { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 /* The mode tabs and the Course/Balance switch stop stretching once they have
    said what they are. */
 .grp > .seg, .pane > .seg { justify-self: start; }
 .grp--scen .btnrow { justify-self: start; }
-/* The drawn curve does not need the whole page to be read. */
-.draw { max-width: 620px; }
+.grp__head > .seg { margin-left: auto; }
 .tl { grid-column: 1 / -1; }
-
-@media (max-width: 939px) {
-  .panel { position: static; }
-  .hdrwrap { height: auto !important; }
-}
-
+.grp > .sub, .grp > .sub__note, .grp > .viz, .grp > .key { grid-column: 1 / -1; }
 
 /* A band is a row of controls that belongs together, spread across the page
    rather than stacked down what used to be a narrow column. */
@@ -921,7 +873,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   grid-column: 1 / -1;
   display: grid; align-items: start;
   gap: .2rem 1.6rem;
-  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
 }
 .band > .ctl > .note { margin-bottom: .3rem; }
 
@@ -965,17 +917,10 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 #grp-compare > .btnrow { justify-self: start; }
 
 
-/* Six professions, one row, whatever the tracks would otherwise work out to. */
-@media (min-width: 1120px) { .picks { grid-template-columns: repeat(6, 1fr); } }
-@media (min-width: 780px) and (max-width: 1119px) { .picks { grid-template-columns: repeat(3, 1fr); } }
 /* The line under them explains all six, so it reads across. */
 #pane-career > .note { grid-column: 1 / -1; }
 
 
-/* Narrow: every section on the page at once, and the pills are jump links. */
-@media (max-width: 939px) {
-  .grp + .grp { border-top: 1px solid var(--line); }
-}
 
 
 /* A chart inside a section takes the row, not one 250px column of it. */
@@ -986,3 +931,20 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
 /* The line under a sub-heading explains what follows it, so it reads across. */
 .grp > .sub + .note { grid-column: 1 / -1; }
+
+
+/* ---- the panel, folded away -------------------------------------------- */
+.panel__toggle {
+  font: inherit; font-size: .74rem; font-weight: 600; cursor: pointer;
+  padding: .28rem .5rem; border-radius: 6px; white-space: nowrap;
+  border: 1px solid var(--line-2); background: var(--bg-4); color: var(--ink-3);
+}
+.panel__toggle:hover { background: var(--bg-5); color: var(--ink); }
+
+@media (min-width: 1040px) {
+  body.panel-shut .app { grid-template-columns: 54px minmax(0, 1fr); }
+  body.panel-shut .panel > form,
+  body.panel-shut .panel__head > div { display: none; }
+  body.panel-shut .panel__head { padding: 1rem .5rem; justify-content: center; }
+  body.panel-shut .panel__toggle { padding: .35rem .45rem; }
+}
