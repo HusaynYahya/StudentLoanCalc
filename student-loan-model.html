@@ -2359,7 +2359,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     { id: "none", label: "No maintenance loan", full: "No maintenance loan", max: 0, min: 0 }
   ];
 
-  /* Real progression, in today's money, at year `k` of the career. */
+  /* Real progression, in base-year money, at year `k` of the career. */
   function careerReal(career, k) {
     var pts = Object.keys(career.points).map(Number).sort(function (a, b) { return a - b; });
     var first = pts[0], last = pts[pts.length - 1];
@@ -2802,6 +2802,30 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
    * FORMATTING
    * -------------------------------------------------------------------- */
 
+  /* The tax year we are standing in. "Today" reads as whenever you happen to
+     be looking; a year says which one, and does not quietly go stale. */
+  /* Two labels sit in the markup and cannot be written until the model has
+     said which year it is reckoning in. */
+  function nameTheYears() {
+    var owed = document.querySelector('label[for="openingBalance"]');
+    if (owed) owed.textContent = "Owed in " + nowLabel();
+    var basis = document.querySelector('[data-basis="real"]');
+    if (basis) {
+      var b = lastSim && lastSim.combined.years.length
+        ? lastSim.combined.years[0].label : E.taxYearLabel(E.BASE_TAX_YEAR);
+      basis.textContent = b + " money";
+    }
+  }
+
+  function nowTaxYear() {
+    var d = new Date();
+    // The UK tax year turns on 6 April, so January to early April is still
+    // the year before.
+    return d.getMonth() + 1 < 4 || (d.getMonth() + 1 === 4 && d.getDate() < 6)
+      ? d.getFullYear() - 1 : d.getFullYear();
+  }
+  function nowLabel() { return E.taxYearLabel(nowTaxYear()); }
+
   function gbp(n) {
     return "£" + Math.round(n).toLocaleString("en-GB");
   }
@@ -2825,6 +2849,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
   function run() {
     captureScenario();
+    nameTheYears();
     if (!tlGrab) renderTimelineTrack();   // not while a block is under the pointer
 
     var runs;
@@ -2850,7 +2875,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
    *
    * Eight sliders described a salary curve without ever showing its shape.
    * This is the shape: years across, salary up, and points you place yourself.
-   * Stored as {t, v} — years since work began, and salary in today's money —
+   * Stored as {t, v} — years since work began, and salary in base-year money —
    * so moving the year work starts carries the whole curve with it.
    * -------------------------------------------------------------------- */
 
@@ -2945,7 +2970,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
     var held = dpDrag && dpDrag.pt;
     $("drawNote").innerHTML = held
-      ? "Year <b>" + held.t + "</b> of your career \u2014 <b>" + gbp(held.v) + "</b> a year, in today\u2019s money."
+      ? "Year <b>" + held.t + "</b> of your career \u2014 <b>" + gbp(held.v) + "</b> a year, in " + E.taxYearLabel(E.BASE_TAX_YEAR) + " money."
       : pts.length
         ? pts.length + (pts.length === 1 ? " point" : " points") +
           ". Click to add one, drag to move it, click it twice to take it away " +
@@ -3242,7 +3267,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       cells.push('<div class="hcell is-ghost"><p class="hcell__who"><span class="dot"></span>Paid upfront</p>' +
         '<p class="hcell__fig">' + gbp(up) + "</p>" +
         '<p class="hcell__sub">' + (state.loanMode === "balance"
-          ? "clearing the whole balance, in cash, today"
+          ? "clearing the whole balance, in cash, in " + nowLabel()
           : "upfront costs of tuition fees") + "</p></div>");
     }
 
@@ -3515,7 +3540,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     }).join(" ");
   }
 
-  // Is the reader looking at cash of the day, or today's money?
+  // Is the reader looking at cash of the day, or base-year money?
   function scaled(y, v) { return state.basis === "real" ? v * y.deflator : v; }
 
   /* ---- 1. balance outstanding, one line per scenario -------------------- */
@@ -3797,7 +3822,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
         ]
       : [
           { k: "repay", label: "keep repaying as required", fv: o.pvRepayments },
-          { k: "clear", label: "pay it all off today", fv: o.pvLump }
+          { k: "clear", label: "pay it all off in " + nowLabel(), fv: o.pvLump }
         ]
     ).filter(function (c) { return c.fv > 0; }).sort(function (a, b) { return a.fv - b.fv; });
 
@@ -3823,7 +3848,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     return { tone: best.k === "repay" ? "good" : "warn",
       verdict: best.k === "repay"
                  ? (atStartRec ? "Take the loan and repay as required." : "Keep repaying as required.")
-             : best.k === "clear" ? "Pay it off today if you can."
+             : best.k === "clear" ? "Pay it off in " + nowLabel() + " if you can."
              : "Pay the fees in cash if you can.",
       body: "In " + E.taxYearLabel(o.baseYear) + " money that comes to <b>" + gbp(best.fv) +
             "</b> against <b>" + gbp(worst.fv) + "</b> for the dearest \u2014 <b>" + gbp(spread) +
@@ -3839,7 +3864,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   function renderBigs(runs) {
     var sim = runs.filter(function (s) { return s.index === state.active; })[0] || runs[0];
     var r = sim.combined, o = sim.opportunity;
-    var baseYear = r.years.length ? r.years[0].label : "today";
+    var baseYear = r.years.length ? r.years[0].label : nowLabel();
     var endYearLabel = r.years.length
       ? E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1) : "the end";
 
@@ -3856,7 +3881,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       {
         k: "In " + baseYear + " money",
         v: gbp(r.totalRealRepaid),
-        sub: "value of the repayments, adjusted for inflation to today\u2019s value, at " +
+        sub: "value of the repayments, adjusted for inflation to " + baseYear + " value, at " +
              pct(sim.assumptions.inflation) + " a year",
         tone: "cool"
       },
@@ -3875,7 +3900,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
         k: "…and in " + baseYear + " money",
         v: gbp(o.realFvUpfront),
         sub: o.upfrontPaid > 0
-          ? "the same pot, adjusted for inflation to today\u2019s value, at " +
+          ? "the same pot, adjusted for inflation to " + baseYear + " value, at " +
             pct(sim.assumptions.inflation) + " a year"
           : "nothing saved, in any money",
         tone: "warm"
@@ -3944,7 +3969,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     var endLabel = o.years
       ? E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1)
       : "the end";
-    var baseLabel = o.baseYear != null ? E.taxYearLabel(o.baseYear) : "today";
+    var baseLabel = o.baseYear != null ? E.taxYearLabel(o.baseYear) : nowLabel();
 
     var peakBalance = repaying.reduce(function (m, y) {
       return Math.max(m, y.closingBalance);
@@ -3952,14 +3977,14 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
     var rows = [
       { g: "The loan", k: "Borrowed", v: gbp(r.borrowed) },
-      { g: "The loan", k: "Outstanding today", v: owedNow(sim).text, c: "warn" },
+      { g: "The loan", k: "Outstanding in " + nowLabel(), v: owedNow(sim).text, c: "warn" },
       { g: "The loan", k: "Owed when repayment starts", v: gbp(r.balanceAtRepayStart) },
       { g: "The loan", k: "Interest charged", v: gbp(r.totalInterest), c: "warn" },
       { g: "The loan", k: "Peak balance", v: gbp(peakBalance),
         hide: Math.abs(peakBalance - r.balanceAtRepayStart) < 1 },
 
       { g: "What you pay", k: "Handed over, in cash", v: gbp(r.totalRepaid), c: "good" },
-      { g: "What you pay", k: "Handed over, today's money", v: gbp(r.totalRealRepaid), c: "good" },
+      { g: "What you pay", k: "Handed over, in " + baseLabel + " money", v: gbp(r.totalRealRepaid), c: "good" },
       { g: "What you pay", k: "First deduction", v: firstPaid ? gbp(firstPaid.monthlyRepayment) + " a month" : "never" },
       { g: "What you pay", k: "Peak deduction", v: gbp(peak) + " a month",
         hide: !firstPaid || Math.abs(peak - firstPaid.monthlyRepayment) < 1 },
@@ -3999,8 +4024,8 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       : [
           { key: "repay",   k: "Keep repaying as required", cash: r.totalRepaid, fv: o.pvRepayments,
             why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
-          { key: "clear",   k: "Pay it all off today",      cash: o.lump,        fv: o.pvLump,
-            why: "the whole balance as it stands now" }
+          { key: "clear",   k: "Pay it all off in " + nowLabel(), cash: o.lump, fv: o.pvLump,
+            why: "the whole balance as it stands in " + nowLabel() }
         ]
     ).filter(function (c) { return c.cash > 0; })
      // Cheapest first, so the answer is the first thing read rather than
@@ -4053,14 +4078,14 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
           var owing = state.loanMode === "balance";
           var alt = owing ? o.lump : o.upfrontPaid;
           var cash = "In cash the loan looks like <b>" + gbp(r.totalRepaid) + "</b> against <b>" +
-            gbp(alt) + "</b> to " + (owing ? "clear it outright today" : "have paid the fees yourself") +
+            gbp(alt) + "</b> to " + (owing ? "clear it outright in " + nowLabel() : "have paid the fees yourself") +
             ". But that money leaves your hands " + (owing ? "now" : "during the course") +
             " and the repayments trickle out over " + r.yearsRepaying +
             " years, so the two are not the same money. ";
           var priced = "In " + E.taxYearLabel(o.baseYear) + " money they come to <b>" +
             gbp(o.pvRepayments) + "</b> and <b>" + gbp(owing ? o.pvLump : o.pvUpfront) + "</b>";
           var better = o.pvRepayments <= (owing ? o.pvLump : o.pvUpfront)
-            ? "repaying as required" : (owing ? "clearing it today" : "paying the fees in cash");
+            ? "repaying as required" : (owing ? "clearing it in " + nowLabel() : "paying the fees in cash");
           return cash + priced + " — so the cheaper of the two is <b>" + better + "</b>.";
         })();
   }
@@ -4511,9 +4536,10 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   function csv() {
     if (!lastSim) return "";
     var r = lastSim.combined;
+    var baseLabel = r.years.length ? r.years[0].label : nowLabel();
     var head = ["Tax year", "Age", "Phase", "Gross salary", "Threshold", "Monthly repayment",
       "Interest rate", "Repaid in year", "Interest charged", "Borrowed in year", "Repaid to date",
-      "Interest to date", "Closing balance", "Closing balance (today's money)"];
+      "Interest to date", "Closing balance", "Closing balance (" + baseLabel + " money)"];
     var lines = [head.join(",")];
     r.years.forEach(function (y) {
       lines.push([
@@ -4528,7 +4554,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     lines.push("");
     lines.push(["Borrowed", Math.round(r.borrowed)].join(","));
     lines.push(["Repaid in total", Math.round(r.totalRepaid)].join(","));
-    lines.push(["Repaid in total (today's money)", Math.round(r.totalRealRepaid)].join(","));
+    lines.push(["Repaid in total (" + baseLabel + " money)", Math.round(r.totalRealRepaid)].join(","));
     lines.push(["Interest charged", Math.round(r.totalInterest)].join(","));
     lines.push(["Written off", Math.round(r.writtenOff || 0)].join(","));
     lines.push(["Cost per pound borrowed", r.perPoundBorrowed.toFixed(2)].join(","));
@@ -4795,7 +4821,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       state.scen[state.active].manual = {}; buildSalaryTable(); run();
     });
 
-    // Cash / today's money
+    // Cash / base-year money
     document.querySelectorAll("[data-basis]").forEach(function (b) {
       b.addEventListener("click", function () {
         state.basis = b.dataset.basis;
