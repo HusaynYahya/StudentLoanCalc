@@ -6,7 +6,7 @@
 <meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
 <meta name="color-scheme" content="dark" />
 <title>Student loan · repayment model</title>
-<link rel="stylesheet" href="loan.css?v=023ee557" />
+<link rel="stylesheet" href="loan.css?v=fe8ea7e6" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -34,6 +34,7 @@
         <div class="grp__head"><h2>Compare</h2></div>
         <div class="scens" id="scenTabs" role="tablist" aria-label="Scenarios"></div>
         <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">Compare with paying upfront</span></label>
+        <div class="btnrow"><button type="button" class="btn" id="resetAll">Start over</button></div>
         <p class="note">Everything below edits the scenario you have selected. All of them stay on the charts.</p>
       </section>
 
@@ -104,31 +105,17 @@
         </div>
 
         <div class="pane" id="pane-course" role="tabpanel" aria-labelledby="tab-course">
-          <div class="ctl">
-            <div class="ctl__top">
-              <label for="startYear">Undergraduate starts</label>
-              <span class="ctl__val"><input type="number" id="startYear" min="2000" max="2040" step="1" value="2026" data-slider="2015,2035,1" /></span>
-            </div>
-          </div>
-          <div class="ctl">
-            <div class="ctl__top"><label id="lenLabel">…for</label></div>
-            <div class="chips" role="radiogroup" aria-labelledby="lenLabel" id="lenChips"></div>
-            <input type="hidden" id="courseYears" value="3" />
-          </div>
+          <p class="note note--lede">Drag the bands on <b>the whole thing, year by year</b> to set when
+            you study, when you start work, and for how long. The figures below are the money.</p>
+
+          <input type="hidden" id="startYear" value="2026" />
+          <input type="hidden" id="courseYears" value="3" />
+          <input type="hidden" id="pgStartYear" value="2029" />
+          <input type="hidden" id="pgYears" value="1" />
+          <input type="hidden" id="workStartYear" value="2029" />
 
           <label class="check"><input type="checkbox" id="hasPgl" /> <span>Postgraduate degree too</span></label>
           <div id="pglRow" hidden>
-            <div class="ctl">
-              <div class="ctl__top">
-                <label for="pgStartYear">Postgraduate starts</label>
-                <span class="ctl__val"><input type="number" id="pgStartYear" min="2000" max="2050" step="1" value="2029" data-slider="2018,2045,1" /></span>
-              </div>
-            </div>
-            <div class="ctl">
-              <div class="ctl__top"><label id="pgLenLabel">…for</label></div>
-              <div class="chips" role="radiogroup" aria-labelledby="pgLenLabel" id="pgLenChips"></div>
-              <input type="hidden" id="pgYears" value="1" />
-            </div>
             <div class="ctl">
               <div class="ctl__top">
                 <label for="pglBalance">Postgraduate borrowed</label>
@@ -136,14 +123,6 @@
               </div>
               <p class="note">6% above £21,000, from the April after the postgraduate course ends.</p>
             </div>
-          </div>
-
-          <div class="ctl">
-            <div class="ctl__top">
-              <label for="workStartYear">Starts work</label>
-              <span class="ctl__val"><input type="number" id="workStartYear" min="2000" max="2060" step="1" value="2029" data-slider="2018,2050,1" /></span>
-            </div>
-            <p class="note" id="workHint"></p>
           </div>
 
           <div class="ctl">
@@ -162,6 +141,7 @@
 
           <p class="readout" id="borrowSummary"></p>
           <p class="note" id="startHint"></p>
+          <p class="note" id="workHint"></p>
         </div>
 
         <div class="pane" id="pane-balance" role="tabpanel" aria-labelledby="tab-balance" hidden>
@@ -290,8 +270,8 @@
     <section class="cards">
 
       <figure class="card card--wide">
-        <figcaption><h3>The years, blocked out</h3>
-          <p>Study, the gap before work, the working years and any breaks — with the two dates the law fixes.</p></figcaption>
+        <figcaption><h3>The whole thing, year by year</h3>
+          <p>Study, the gap before work, the working years and any breaks — with the dates the law fixes above the bar, and what happens to the balance below it.</p></figcaption>
         <div id="timelineChart" class="viz"></div>
         <p class="key" id="timelineKey"></p>
         <p class="note" id="timelineNote"></p>
@@ -368,11 +348,6 @@
         <p class="note" id="sensNote"></p>
       </figure>
 
-      <figure class="card card--wide">
-        <figcaption><h3>What happens, and when</h3></figcaption>
-        <ol class="stones" id="milestones"></ol>
-      </figure>
-
     </section>
 
     <section class="card card--flat" aria-labelledby="h-log">
@@ -440,7 +415,7 @@
   </main>
 </div>
 
-<script src="engine.js?v=023ee557"></script>
-<script src="loan.js?v=023ee557" defer></script>
+<script src="engine.js?v=fe8ea7e6"></script>
+<script src="loan.js?v=fe8ea7e6" defer></script>
 </body>
 </html>

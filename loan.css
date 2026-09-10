@@ -670,3 +670,11 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   font-size: .64rem; letter-spacing: .12em; text-transform: uppercase;
   color: var(--ink-4); font-weight: 700;
 }
+
+/* ---- dragging the timeline --------------------------------------------- */
+
+#timelineChart svg { touch-action: pan-y; }
+.tl-handle { cursor: ew-resize; }
+.tl-handle:hover circle, .tl-handle:focus-visible circle { r: 6; }
+.tl-handle:focus-visible { outline: none; }
+.tl-handle:focus-visible line { stroke-width: 3; }
