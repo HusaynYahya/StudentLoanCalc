@@ -655,8 +655,10 @@
       ? "Year <b>" + held.t + "</b> of your career \u2014 <b>" + gbp(held.v) + "</b> a year, in today\u2019s money."
       : pts.length
         ? pts.length + (pts.length === 1 ? " point" : " points") +
-          " \u2014 click to add one, drag to move it, click it twice to take it away."
-        : "Empty. Click anywhere on the chart to place your first point.";
+          ". Click to add one, drag to move it, click it twice to take it away " +
+          "\u2014 inflation added on top."
+        : "Empty. Click anywhere on the chart to place your first point " +
+          "\u2014 inflation added on top.";
   }
 
   // Where a pointer is, in career-year and salary.
