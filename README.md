@@ -58,6 +58,22 @@ The selected profile gets a panel of its own with every number on one screen —
 the loan, what you pay, and what the same money would have done in a savings
 account — plus a chart of the two choices racing each other.
 
+## The hard cut-off
+
+The write-off is not a taper. On its anniversary — 25 years for Plan 1, 30 for
+Plans 2 and 4, 40 for Plan 5 — whatever is left is cancelled outright, however
+large, and the deductions stop. For most Plan 5 borrowers that, not a final
+payment, is how the loan ends.
+
+So it is drawn as a wall. Every time-series chart carries a dashed vertical
+line at the cut-off, labelled with the term, and the axis always runs to it
+even when every profile clears long beforehand — that empty stretch to the
+right is the point. A balance that runs all the way to the wall does not taper
+off: the chart shows the drop to zero, because that is what happens to it.
+
+Profiles on different plans get their own walls, labelled and staggered so
+25-, 30- and 40-year terms can be read together.
+
 ## What is always in view
 
 A strip along the top of the results carries the things that decide everything

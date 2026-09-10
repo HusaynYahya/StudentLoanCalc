@@ -678,19 +678,30 @@
           return { taxYear: y.taxYear, label: y.label,
                    v: real ? y.realClosingBalance : y.closingBalance };
         }),
-        done: sim.combined.everRepaidInFull
+        done: sim.combined.everRepaidInFull,
+        cutoff: repayStartYear() + E.RULES[sim.settings.plan].writeOffYears
       };
     });
-    var f = spanFrame(runs, series, gbpShort, "Balance outstanding by tax year", 760, 300);
+    var f = spanFrame(runs, series, gbpShort, "Balance outstanding by tax year", 760, 300, true);
 
     var body = series.map(function (S) {
-      return '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour +
-        '" stroke-width="2.25"/>' + endDot(S, f);
+      var path = '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour +
+        '" stroke-width="2.25"/>';
+      // A loan that runs to the wall does not taper off — it is cancelled where
+      // it stands, so draw the drop rather than letting the line just stop.
+      if (!S.done && S.cutoff != null) {
+        var last = S.pts[S.pts.length - 1];
+        path += '<path d="M' + f.x(last.taxYear).toFixed(1) + " " + f.y(last.v).toFixed(1) +
+          "L" + f.x(S.cutoff).toFixed(1) + " " + f.y(last.v).toFixed(1) +
+          "L" + f.x(S.cutoff).toFixed(1) + " " + f.y(0).toFixed(1) +
+          '" fill="none" stroke="' + S.meta.colour + '" stroke-width="2.25" stroke-dasharray="4 3" opacity=".75"/>';
+      }
+      return path + endDot(S, f);
     }).join("");
 
-    $("chart").innerHTML = f.open + body + f.close;
+    $("chart").innerHTML = f.open + body + cutoffMarks(runs, f) + f.close;
     $("chartKey").innerHTML = runKeys(runs) +
-      '<i style="color:var(--ink-4)">each line ends where that loan does</i>';
+      '<i style="color:var(--ink-3)">the write-off wall — whatever is left is cancelled</i>';
   }
 
   function endDot(S, f) {
@@ -711,7 +722,7 @@
     if (!series.length || !series[0].pts.length) { $("salaryChart").innerHTML = ""; return; }
 
     var all = series.map(function (S) { return { pts: S.pts.concat(S.thr) }; });
-    var f = spanFrame(runs, all, gbpShort, "Gross salary against the repayment threshold", 440, 260, true);
+    var f = spanFrame(runs, all, gbpShort, "Gross salary against the repayment threshold", 440, 260, false);
 
     var body = series.map(function (S) {
       var band = S.pts.map(function (p, i) {
@@ -754,7 +765,7 @@
         '" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="4 3"/>'
       : "";
 
-    $("monthlyChart").innerHTML = f.open + zero + body + f.close;
+    $("monthlyChart").innerHTML = f.open + zero + body + cutoffMarks(runs, f, { label: false }) + f.close;
     $("monthlyKey").innerHTML = runKeys(runs) +
       (state.showNoLoan ? '<i style="color:var(--ink-3)">No loan — £0, always</i>' : "");
   }
@@ -779,7 +790,7 @@
     series.forEach(function (S) { S.pts.forEach(function (p) { max = Math.max(max, p.v); }); });
     var top = Math.ceil(max * 100 + 0.5) / 100;
     var f = spanFrame(runs, series, function (v) { return (v * 100).toFixed(0) + "%"; },
-                      "Interest rate charged by tax year", 440, 260, false, { top: top, step: top > 0.08 ? 0.02 : 0.01 });
+                      "Interest rate charged by tax year", 440, 260, true, { top: top, step: top > 0.08 ? 0.02 : 0.01 });
 
     var rpiLine = '<line x1="' + f.ml + '" y1="' + f.y(a.rpi).toFixed(1) + '" x2="' + (f.W - 14) +
       '" y2="' + f.y(a.rpi).toFixed(1) + '" stroke="var(--ink-4)" stroke-width="1" stroke-dasharray="2 4"/>';
@@ -796,7 +807,7 @@
         (S.dash ? ' stroke-dasharray="4 3"' : "") + ' stroke-linejoin="round"/>';
     }).join("");
 
-    $("rateChart").innerHTML = f.open + rpiLine + body + f.close;
+    $("rateChart").innerHTML = f.open + rpiLine + body + cutoffMarks(runs, f, { label: false }) + f.close;
     $("rateKey").innerHTML = runKeys(runs) + '<i style="color:var(--ink-4)">RPI, ' + pct(a.rpi) + "</i>";
     $("rateNote").textContent = rateExplanation(runs[0]);
   }
@@ -867,7 +878,7 @@
         return { taxYear: y.taxYear, label: y.label, v: cum };
       }) };
     });
-    var f = spanFrame(runs, series, gbpShort, "Total handed over, accumulating, by tax year", 760, 280);
+    var f = spanFrame(runs, series, gbpShort, "Total handed over, accumulating, by tax year", 760, 280, true);
 
     var body = series.map(function (S) {
       return '<path d="' + area(S.pts, f) + '" fill="' + S.meta.colour + '" opacity=".08"/>' +
@@ -881,7 +892,7 @@
         '" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink-3)">No loan \u2014 you keep it all</text>'
       : "";
 
-    $("costChart").innerHTML = f.open + zero + body + f.close;
+    $("costChart").innerHTML = f.open + zero + body + cutoffMarks(runs, f) + f.close;
     $("costKey").innerHTML = runKeys(runs) +
       (state.showNoLoan ? '<i style="color:var(--ink-3)">Never borrowed</i>' : "");
   }
@@ -931,6 +942,13 @@
       { k: "Inflation", v: pct(a.inflation) },
       { k: "Thresholds", v: "+" + pct(a.thresholdGrowth) + " a year" },
       { k: "Savings", v: pct(a.savings) },
+      { k: "Write-off", v: (function () {
+          var cs = cutoffs(runs).sort(function (x, y) { return x.years - y.years; });
+          // Three plans spelled out in full ran the strip off a phone screen.
+          return cs.length === 1
+            ? cs[0].years + " yrs \u00b7 " + E.taxYearLabel(cs[0].taxYear - 1)
+            : cs.map(function (c) { return c.years; }).join(" / ") + " yrs";
+        })() },
       { k: "Threshold now", v: gbp(E.thresholdFor(runs[0].settings.plan, Math.max(E.BASE_TAX_YEAR, repayStartYear()), a)) }
     ];
     $("facts").innerHTML = facts.map(function (f) {
@@ -1048,6 +1066,55 @@
       '<i style="color:var(--ink-4)">whichever is lower is the cheaper choice</i>';
   }
 
+  /* ---- the hard cut-off --------------------------------------------------- *
+   * The write-off is not a soft landing: on its anniversary the balance is
+   * cancelled outright, however large, and the deductions stop. That wall is
+   * the single most important feature of the whole scheme, so it gets drawn.
+   * ---------------------------------------------------------------------- */
+
+  function cutoffs(runs) {
+    var seen = {}, out = [];
+    runs.forEach(function (sim) {
+      var years = E.RULES[sim.settings.plan].writeOffYears;
+      var at = repayStartYear() + years;                 // the April it lands on
+      var k = at + ":" + years;
+      if (seen[k]) { seen[k].plans.push(sim.meta.id); return; }
+      seen[k] = { taxYear: at, years: years, plans: [sim.meta.id], colour: sim.meta.colour };
+      out.push(seen[k]);
+    });
+    // A cut-off every profile shares is not one profile's business — grey it.
+    out.forEach(function (c) { if (out.length === 1) c.colour = "var(--ink-3)"; });
+    return out;
+  }
+
+  // The wall itself, drawn over the plotted lines.
+  function cutoffMarks(runs, f, opts) {
+    opts = opts || {};
+    var walls = cutoffs(runs).sort(function (a, b) { return a.taxYear - b.taxYear; });
+    return walls.map(function (c, i) {
+      var x = f.x(c.taxYear);
+      if (!isFinite(x)) return "";
+      var label = c.years + " years \u2014 written off";
+      var out =
+        '<line x1="' + x.toFixed(1) + '" y1="' + f.mt + '" x2="' + x.toFixed(1) + '" y2="' + (f.mt + f.ih) +
+        '" stroke="' + c.colour + '" stroke-width="1.5" stroke-dasharray="2 4" opacity=".8"/>';
+      if (opts.label !== false) {
+        // Terms only five years apart would put their labels on top of each
+        // other, so each wall gets its own line.
+        out += '<text x="' + (x - 7).toFixed(1) + '" y="' + (f.mt + 11 + i * 14) +
+          '" text-anchor="end" font-size="10.5" font-weight="600" fill="' + c.colour + '">' +
+          (c.plans.length < runs.length ? c.plans.join("") + " \u00b7 " : "") + label + "</text>";
+      }
+      return out;
+    }).join("");
+  }
+
+  // The furthest cut-off, so the wall is always inside the frame even when
+  // every profile clears long before it.
+  function cutoffMax(runs) {
+    return cutoffs(runs).reduce(function (m, c) { return Math.max(m, c.taxYear); }, -Infinity);
+  }
+
   /* ---- shared plumbing --------------------------------------------------- */
 
   function line(pts, f) {
@@ -1062,7 +1129,7 @@
 
   // One frame wide enough for every scenario on the chart, so the lines are
   // read against the same axes rather than each against its own.
-  function spanFrame(runs, series, fmt, title, w, h, narrow, forced) {
+  function spanFrame(runs, series, fmt, title, w, h, showCutoff, forced) {
     var lo = Infinity, hi = -Infinity, max = 0, years = null;
     series.forEach(function (S) {
       S.pts.forEach(function (p) {
@@ -1072,6 +1139,15 @@
       });
       if (!years || S.pts.length > years.length) years = S.pts;
     });
+    // Keep the write-off wall in view even when every line stops well short of
+    // it — that gap is the point.
+    if (showCutoff) {
+      var wall = cutoffMax(runs);
+      if (isFinite(wall) && wall > hi) {
+        hi = wall;
+        years = years.concat([{ taxYear: wall, label: E.taxYearLabel(wall) }]);
+      }
+    }
     var s = forced || niceScale(max);
     return frame({ years: years, xMin: lo, xMax: hi, top: s.top, step: s.step,
                    fmt: fmt, title: title, w: w, h: h });
