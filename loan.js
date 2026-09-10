@@ -1340,7 +1340,13 @@
           { key: "repay",   k: "Borrow and repay",     cash: r.totalRepaid, fv: o.pvRepayments,
             why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
           { key: "upfront", k: "Pay the fees in cash", cash: o.upfrontPaid, fv: o.pvUpfront,
-            why: "never borrow — find it as the fees fall due" }
+            why: (function () {
+              var yrs = r.years.filter(function (y) { return y.borrowed > 0; });
+              return "never borrow — found across " + yrs.length +
+                (yrs.length === 1 ? " year" : " years") + ", " +
+                (yrs.length ? yrs[0].label : "") + " to " +
+                (yrs.length ? yrs[yrs.length - 1].label : "");
+            })() }
         ]
       : [
           { key: "repay",   k: "Keep repaying as required", cash: r.totalRepaid, fv: o.pvRepayments,
