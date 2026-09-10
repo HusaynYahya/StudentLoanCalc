@@ -6,7 +6,7 @@
 <meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
 <meta name="color-scheme" content="dark" />
 <title>Student loan · repayment model</title>
-<link rel="stylesheet" href="loan.css?v=5a1667ca" />
+<link rel="stylesheet" href="loan.css?v=6c5d8c76" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -33,7 +33,7 @@
       <section class="grp grp--scen">
         <div class="grp__head"><h2>Compare</h2></div>
         <div class="scens" id="scenTabs" role="tablist" aria-label="Scenarios"></div>
-        <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">No loan at all</span></label>
+        <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">Compare with paying upfront</span></label>
         <p class="note">Everything below edits the scenario you have selected. All of them stay on the charts.</p>
       </section>
 
@@ -189,6 +189,20 @@
         </div>
       </section>
 
+      <!-- ---- savings ---- -->
+      <section class="grp">
+        <div class="grp__head"><h2>Savings account</h2></div>
+        <div class="ctl">
+          <div class="ctl__top">
+            <label for="savings">Return a year</label>
+            <span class="ctl__val"><input type="number" id="savings" min="0" max="20" step="0.1" value="4.5" data-slider="0,12,0.1" /><i>%</i></span>
+          </div>
+          <p class="note">What your money would earn if you kept it rather than handing it over.
+            Drives <em>growth given up</em> and the repay-or-save comparison.</p>
+        </div>
+        <p class="readout" id="savingsReadout"></p>
+      </section>
+
       <!-- ---- assumptions ---- -->
       <details class="grp grp--fold">
         <summary><h2>Assumptions</h2><span>the unknowables</span></summary>
@@ -211,13 +225,6 @@
               <label for="inflation">Inflation</label>
               <span class="ctl__val"><input type="number" id="inflation" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><i>%</i></span>
             </div>
-          </div>
-          <div class="ctl">
-            <div class="ctl__top">
-              <label for="savings">Savings return</label>
-              <span class="ctl__val"><input type="number" id="savings" min="0" max="20" step="0.1" value="4.5" data-slider="0,12,0.1" /><i>%</i></span>
-            </div>
-            <p class="note">What the money would earn if you kept it instead of handing it over.</p>
           </div>
           <div class="ctl">
             <div class="ctl__top">
@@ -274,14 +281,14 @@
 
       <figure class="card card--wide">
         <figcaption><h3>What you have handed over</h3>
-          <p>Running total until the repayments stop. The flat line along the bottom is the life where you never borrowed.</p></figcaption>
+          <p>Running total until the repayments stop. The grey line is the other life — fees paid in cash during the course, then nothing.</p></figcaption>
         <div id="costChart" class="viz"></div>
         <p class="key" id="costKey"></p>
       </figure>
 
       <figure class="card card--wide">
         <figcaption><h3>Side by side</h3>
-          <p>Lifetime cost of each profile, against never having borrowed.</p></figcaption>
+          <p>Lifetime cost of each profile, against finding the fees in cash instead.</p></figcaption>
         <div id="barsChart" class="viz"></div>
         <p class="key" id="barsKey"></p>
       </figure>
@@ -394,7 +401,7 @@
   </main>
 </div>
 
-<script src="engine.js?v=5a1667ca"></script>
-<script src="loan.js?v=5a1667ca" defer></script>
+<script src="engine.js?v=6c5d8c76"></script>
+<script src="loan.js?v=6c5d8c76" defer></script>
 </body>
 </html>

@@ -38,6 +38,27 @@ Only one set of income controls exists in the page: the profile tabs load a
 profile into it and edits are written back, and the panel tints to whichever
 profile is selected so it is never ambiguous which line a slider is moving.
 
+## Not borrowing is not free
+
+The obvious baseline for "what does the loan cost me" is zero, and it is
+wrong. Choosing not to borrow does not make a degree free — it means finding
+£9,790 a year of tuition and your living costs in cash, while you study, out
+of money you do not have yet. That is the alternative, and it is what the
+grey line is.
+
+So the comparison the dashboard draws is between two real lives:
+
+| | |
+| --- | --- |
+| **Borrow it** | £61,860 over three years, repaid at 9% above the threshold — around £123,000 handed over across 27 years |
+| **Pay upfront** | £61,860 found in cash during the course, then nothing, ever |
+
+On the running-cost chart that baseline is not flat: it climbs steeply for
+three years and then stops dead, which is exactly the shape of paying your own
+way. It moves with the tuition and the course length, because it is the cost
+of the course. In balance mode it becomes the cost of clearing what you owe
+today in one payment.
+
 ## The three headline figures
 
 A band of three boxes sits above the charts, for whichever profile is selected:

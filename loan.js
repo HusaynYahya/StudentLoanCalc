@@ -501,8 +501,12 @@
     });
 
     if (state.showNoLoan) {
-      cells.push('<div class="hcell is-ghost"><p class="hcell__who"><span class="dot"></span>No loan</p>' +
-        '<p class="hcell__fig">£0</p><p class="hcell__sub">nothing is ever deducted</p></div>');
+      var up = upfrontTotal(runs[0]);
+      cells.push('<div class="hcell is-ghost"><p class="hcell__who"><span class="dot"></span>Paid upfront</p>' +
+        '<p class="hcell__fig">' + gbp(up) + "</p>" +
+        '<p class="hcell__sub">' + (state.loanMode === "balance"
+          ? "clearing the whole balance, in cash, today"
+          : "the fees and living costs, found in cash") + "</p></div>");
     }
 
     $("heroRow").innerHTML = cells.join("");
@@ -767,7 +771,7 @@
 
     $("monthlyChart").innerHTML = f.open + zero + body + cutoffMarks(runs, f, { label: false }) + f.close;
     $("monthlyKey").innerHTML = runKeys(runs) +
-      (state.showNoLoan ? '<i style="color:var(--ink-3)">No loan — £0, always</i>' : "");
+      (state.showNoLoan ? '<i style="color:var(--ink-3)">Paid upfront — nothing leaves your pay</i>' : "");
   }
 
   /* ---- 4. the interest rate --------------------------------------------- */
@@ -885,16 +889,21 @@
              '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour + '" stroke-width="2.25"/>';
     }).join("");
 
-    var zero = state.showNoLoan
-      ? '<line x1="' + f.ml + '" y1="' + f.y(0).toFixed(1) + '" x2="' + (f.W - 14) + '" y2="' + f.y(0).toFixed(1) +
-        '" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="5 4"/>' +
-        '<text x="' + (f.W - 18) + '" y="' + (f.y(0) - 8).toFixed(1) +
-        '" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink-3)">No loan \u2014 you keep it all</text>'
-      : "";
+    // Paying your own way is not a flat zero: it is a steep climb while the
+    // course runs, then nothing at all for the rest of your life.
+    var zero = "";
+    if (state.showNoLoan) {
+      var up = upfrontSeries(runs[0]);
+      var total = up[up.length - 1].v;
+      zero = '<path d="' + line(up, f) + '" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="5 4"/>' +
+        '<text x="' + (f.W - 18) + '" y="' + (f.y(total) - 8).toFixed(1) +
+        '" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink-3)">Paid upfront \u2014 ' +
+        gbp(total) + "</text>";
+    }
 
     $("costChart").innerHTML = f.open + zero + body + cutoffMarks(runs, f) + f.close;
     $("costKey").innerHTML = runKeys(runs) +
-      (state.showNoLoan ? '<i style="color:var(--ink-3)">Never borrowed</i>' : "");
+      (state.showNoLoan ? '<i style="color:var(--ink-3)">Paid upfront, no loan</i>' : "");
   }
 
   /* ---- 7. side by side --------------------------------------------------- */
@@ -907,7 +916,11 @@
                  ? "cleared " + sim.combined.clearedLabel
                  : gbp(sim.combined.writtenOff) + " written off" };
     });
-    if (state.showNoLoan) rows.push({ label: "No loan", value: 0, colour: "var(--ink-3)", note: "you keep it all" });
+    if (state.showNoLoan) {
+      var up = upfrontTotal(runs[0]);
+      rows.push({ label: "Paid upfront", value: up, colour: "var(--ink-3)",
+                  note: "fees and living costs, in cash, during the course" });
+    }
 
     var max = Math.max.apply(null, rows.map(function (r) { return r.value; })) || 1;
     var rowH = 46, padT = 8, W = 760, labelW = 238, barW = W - labelW - 132;
@@ -927,6 +940,22 @@
       '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Lifetime cost of each scenario">' + body + "</svg>";
     $("barsKey").innerHTML = '<i style="color:var(--ink-4)">Cash handed over across the whole term</i>';
   }
+
+  /* ---- the alternative: find the money yourself -------------------------- *
+   * Not borrowing does not make a degree free. It means paying the fees and
+   * living costs in cash, as they fall due, during the course. That — not
+   * zero — is what the other life actually costs.
+   * ---------------------------------------------------------------------- */
+
+  function upfrontSeries(sim) {
+    var cum = 0;
+    return sim.combined.years.map(function (y) {
+      cum += y.borrowed;
+      return { taxYear: y.taxYear, label: y.label, v: cum };
+    });
+  }
+
+  function upfrontTotal(sim) { return sim.combined.borrowed; }
 
   /* ---- the three figures that matter most -------------------------------- *
    * For the selected profile: what it costs in cash, what that is worth in
@@ -1377,6 +1406,15 @@
     $("careerNote").textContent = career ? career.note : "";
     markCareer();
     markLength();
+
+    var sim = lastSim;
+    if (sim && $("savingsReadout")) {
+      var o = sim.opportunity;
+      $("savingsReadout").innerHTML = o.foregoneGrowth > 0
+        ? "At <b>" + pct(a.savings) + "</b> those repayments would have grown to <b>" +
+          gbp(o.fvRepayments) + "</b> — <b>" + gbp(o.foregoneGrowth) + "</b> more than you handed over."
+        : "Nothing is deducted on this profile, so there is nothing to have saved instead.";
+    }
 
     $("predictSummary").innerHTML =
       "Starting on <b>" + gbp(firstSal) + "</b> in " + E.taxYearLabel(start) +
