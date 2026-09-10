@@ -1582,23 +1582,81 @@
     return "Charged at " + range + ". " + why + capped;
   }
 
+  /* ---- the years, as a calendar ------------------------------------------ *
+   * A list of five dated sentences hides the shape of the thing: how long the
+   * quiet stretches are, how far apart the turning points sit, how much of a
+   * life this occupies. Laid out as years, that is the first thing you see.
+   * -------------------------------------------------------------------- */
+
   function renderMilestones(sim) {
-    var list = sim.combined.parts ? sim.loans[0].milestones : sim.combined.milestones;
-    if (sim.combined.parts) {
-      // Two loans: describe the pair, then each one's ending.
-      list = sim.loans.reduce(function (acc, r) {
-        return acc.concat(r.milestones.filter(function (m) {
-          return m.kind === "cleared" || m.kind === "writtenOff";
-        }).map(function (m) {
-          return { year: m.year, kind: m.kind, text: r.planLabel + " — " + m.text };
-        }));
-      }, sim.loans[0].milestones.filter(function (m) { return m.kind !== "cleared" && m.kind !== "writtenOff"; }))
-        .sort(function (a, b) { return String(a.year).localeCompare(String(b.year)); });
+    var r = sim.combined;
+    if (!r.years.length) { $("milestones").innerHTML = ""; return; }
+
+    // One short caption per eventful year, keyed by the year it falls in.
+    var events = {};
+    var note = function (taxYear, kind, text) {
+      if (taxYear == null) return;
+      (events[taxYear] || (events[taxYear] = [])).push({ kind: kind, text: text });
+    };
+
+    // A combined ledger carries no milestones of its own, so the turning
+    // points come from the undergraduate loan, which is the larger story.
+    var turns = (r.milestones && r.milestones.length)
+      ? r.milestones : (sim.loans[0].milestones || []);
+
+    turns.forEach(function (m) {
+      if (!/^\d{4}/.test(m.year)) return;
+      var y = Number(m.year.slice(0, 4));
+      if (m.kind === "peak") note(y, "peak", "balance peaks");
+      else if (m.kind === "turn") note(y, "turn", "repayments overtake interest");
+      else if (m.kind === "half") note(y, "half", "half of it repaid");
+      else if (sim.loans.length === 1 && m.kind === "cleared") note(y, "cleared", "cleared in full");
+      else if (sim.loans.length === 1 && m.kind === "written" + "Off") note(y, "written", "written off");
+    });
+
+    // With two loans each ending is its own event, and they rarely coincide.
+    if (sim.loans.length > 1) {
+      sim.loans.forEach(function (loan) {
+        var lbl = loan.everRepaidInFull ? loan.clearedLabel : loan.writeOffLabel;
+        if (!lbl) return;
+        note(Number(lbl.slice(0, 4)),
+             loan.everRepaidInFull ? "cleared" : "written",
+             loan.planLabel + (loan.everRepaidInFull ? " cleared" : " written off"));
+      });
     }
-    $("milestones").innerHTML = list.map(function (m) {
-      return '<li class="is-' + m.kind + '"><span class="when">' + m.year + '</span><span class="what">' + m.text + "</span></li>";
+
+    var firstRepay = (r.years.filter(function (y) { return y.phase === "repaying"; })[0] || {}).taxYear;
+    if (firstRepay != null) note(firstRepay, "start", "repayments begin");
+
+    var cells = r.years.map(function (y) {
+      var evs = events[y.taxYear] || [];
+      var kind = evs.length ? evs[0].kind : null;
+      var cls = "cal__yr" + (y.phase === "studying" ? " is-study" : " is-repay") +
+                (evs.length ? " is-event k-" + kind : "");
+      var title = evs.length
+        ? y.label + " — " + evs.map(function (e) { return e.text; }).join("; ")
+        : y.label + (y.phase === "studying" ? " — studying" : " — repaying " + gbp(y.repaid + y.voluntary));
+      return '<div class="' + cls + '" title="' + title + '">' +
+        "<b>" + y.taxYear + "</b>" +
+        (evs.length ? '<span>' + evs.map(function (e) { return e.text; }).join(" · ") + "</span>" : "") +
+        "</div>";
     }).join("");
+
+    var legend = [
+      { c: "is-study", t: "studying" },
+      { c: "is-repay", t: "repaying" },
+      { c: "k-peak", t: "the balance turns" },
+      { c: "k-cleared", t: "it ends" }
+    ].map(function (l) {
+      return '<i class="cal__key ' + l.c + '">' + l.t + "</i>";
+    }).join("");
+
+    $("milestones").innerHTML =
+      '<div class="cal">' + cells + "</div>" +
+      '<p class="cal__legend">' + legend + "</p>" +
+      '<p class="note">Each box is a tax year, from the first instalment to the last. Hover one for its figures.</p>';
   }
+
 
   /* ---- the log ---------------------------------------------------------- */
 

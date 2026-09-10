@@ -684,3 +684,42 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   padding-top: .8rem; border-top: 1px solid var(--line); max-width: 78ch;
 }
 .choices__now b { color: var(--ink); font-family: var(--num); font-weight: 600; }
+
+/* ---- the years, as a calendar ------------------------------------------ */
+
+.cal {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+}
+.cal__yr {
+  border-radius: 6px; padding: .4rem .45rem .45rem; min-height: 46px;
+  background: var(--bg-4); border: 1px solid transparent;
+  display: flex; flex-direction: column; gap: .1rem; overflow: hidden;
+}
+.cal__yr b {
+  font-family: var(--num); font-size: .78rem; font-weight: 700;
+  color: var(--ink-3); letter-spacing: -.02em;
+}
+.cal__yr span { font-size: .62rem; line-height: 1.25; color: var(--ink-3); }
+.cal__yr.is-study { background: rgba(91,157,255,.12); }
+.cal__yr.is-study b { color: var(--info); }
+.cal__yr.is-repay { background: var(--bg-4); }
+
+/* An eventful year fills its whole box, so the shape of the run is visible
+   before a single word is read. */
+.cal__yr.is-event { grid-column: span 2; border-color: currentColor; }
+.cal__yr.is-event b, .cal__yr.is-event span { color: inherit; }
+.cal__yr.k-start   { color: var(--ink-2); background: var(--bg-5); }
+.cal__yr.k-peak,
+.cal__yr.k-turn    { color: var(--warn); background: rgba(245,165,36,.14); }
+.cal__yr.k-half    { color: var(--ink-2); background: var(--bg-5); }
+.cal__yr.k-cleared { color: var(--good); background: rgba(53,214,164,.14); }
+.cal__yr.k-written { color: var(--bad);  background: rgba(242,84,91,.14); }
+
+.cal__legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; margin: .9rem 0 0; }
+.cal__key { font-style: normal; font-size: .73rem; display: inline-flex; align-items: center; gap: .35rem; color: var(--ink-4); }
+.cal__key::before { content: ""; width: 11px; height: 11px; border-radius: 3px; background: currentColor; opacity: .5; }
+.cal__key.is-study { color: var(--info); }
+.cal__key.is-repay { color: var(--ink-3); }
+.cal__key.k-peak { color: var(--warn); }
+.cal__key.k-cleared { color: var(--good); }
