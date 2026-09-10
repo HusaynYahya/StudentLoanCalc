@@ -3861,21 +3861,23 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
         tone: "cool"
       },
       {
-        k: "Growth given up, by " + endYearLabel,
-        v: gbp(o.foregoneGrowth),
-        sub: o.foregoneGrowth > 0
-          ? "saved at " + pct(o.savingsRate) + " instead, those repayments would have become " +
-            gbp(o.fvRepayments) + " by " + endYearLabel + " — this is the part you never earned"
-          : "nothing is deducted on this profile, so nothing is forfeited",
+        // The question anyone with the fee money in hand actually has: spend
+        // it on the fees, or borrow and let it sit somewhere earning.
+        k: "Fees saved instead, by " + endYearLabel,
+        v: gbp(o.fvUpfront),
+        sub: o.upfrontPaid > 0
+          ? "the " + gbp(o.upfrontPaid) + " of fees, put in a savings account rather than spent, " +
+            "left to earn " + pct(o.savingsRate) + " until " + endYearLabel
+          : "nothing to pay upfront on this profile",
         tone: "warm"
       },
       {
         k: "…and in " + baseYear + " money",
-        v: gbp(o.realForegoneGrowth),
-        sub: o.foregoneGrowth > 0
-          ? "value of that growth, adjusted for inflation to today\u2019s value, at " +
+        v: gbp(o.realFvUpfront),
+        sub: o.upfrontPaid > 0
+          ? "the same pot, adjusted for inflation to today\u2019s value, at " +
             pct(sim.assumptions.inflation) + " a year"
-          : "nothing forfeited, in any money",
+          : "nothing saved, in any money",
         tone: "warm"
       }
     ];
