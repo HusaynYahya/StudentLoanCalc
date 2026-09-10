@@ -970,6 +970,29 @@
     }
   }
 
+  /* What is owed as of this month — the one figure the ledger cannot give you,
+     because every other number on the page is about a whole loan's life and
+     this one is about the day you are standing on. */
+  function owedNow(sim) {
+    var now = new Date();
+    var at = E.ym(now.getFullYear(), now.getMonth() + 1);
+    var all = sim.loans || [];
+    var started = all.some(function (r) { return r.months.length && r.months[0].month <= at; });
+    if (!started) return { owed: 0, text: "nothing drawn yet" };
+
+    var over = all.every(function (r) {
+      return !r.months.length || r.months[r.months.length - 1].month < at;
+    });
+    if (over) {
+      return { owed: 0, text: sim.combined.everRepaidInFull
+        ? "nothing — cleared " + sim.combined.clearedLabel
+        : "nothing — written off " + sim.combined.writeOffLabel };
+    }
+
+    var owed = all.reduce(function (t, r) { return t + E.balanceOn(r, at); }, 0);
+    return { owed: owed, text: gbp(owed) };
+  }
+
   function scenarioName(s) {
     if (!s.career && s.mode === "career") return "";      // not chosen yet
     if (s.mode === "growth") return gbpShort(s.startSalary) + " +" + s.growth + "%";
@@ -1634,6 +1657,7 @@
 
     var rows = [
       { g: "The loan", k: "Borrowed", v: gbp(r.borrowed) },
+      { g: "The loan", k: "Outstanding today", v: owedNow(sim).text, c: "warn" },
       { g: "The loan", k: "Owed when repayment starts", v: gbp(r.balanceAtRepayStart) },
       { g: "The loan", k: "Interest charged", v: gbp(r.totalInterest), c: "warn" },
       { g: "The loan", k: "Peak balance", v: gbp(peakBalance),
@@ -1660,10 +1684,9 @@
     });
 
     // Which alternatives exist depends on where you are standing. Before the
-    // course there are three: never borrow, borrow and let it run, or borrow
-    // and settle it the day it falls due.
+    // course, the choice is whether to borrow at all; once you owe something,
+    // the fees are long spent and the only question left is whether to clear it.
     var atStart = state.loanMode !== "balance";
-    var studyInterest = Math.max(0, o.lump - r.borrowed);
 
     var choices = (atStart
       ? [
@@ -1676,12 +1699,7 @@
                 (yrs.length === 1 ? " year" : " years") + ", " +
                 (yrs.length ? yrs[0].label : "") + " to " +
                 (yrs.length ? yrs[yrs.length - 1].label : "");
-            })() },
-          { key: "clear",   k: "Borrow, then clear it in one payment", cash: o.lump, fv: o.pvLump,
-            why: "one payment in " + E.taxYearLabel(repayStartYear()) +
-                 ", the April repayments would have begun — " + gbp(r.borrowed) +
-                 " borrowed plus " + gbp(studyInterest) +
-                 " of interest run up during the course" }
+            })() }
         ]
       : [
           { key: "repay",   k: "Keep repaying as required", cash: r.totalRepaid, fv: o.pvRepayments,

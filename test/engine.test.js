@@ -621,5 +621,37 @@ test("an unknown plan is refused rather than guessed at", function () {
 
 /* ------------------------------------------------------------------------ */
 
+/* -- What is outstanding right now --------------------------------------- */
+
+console.log("\nWhat is outstanding right now");
+
+test("nothing is owed before the first instalment is drawn", function () {
+  var s = withSalary(40000);
+  var r = s.loans[0];
+  eq(E.balanceOn(r, r.months[0].month - 1), 0, "the month before it starts");
+  ok(E.balanceOn(r, r.months[0].month) > 0, "the month it starts");
+});
+
+test("the balance mid-course is what has been drawn plus interest so far", function () {
+  var s = withSalary(40000);
+  var r = s.loans[0];
+  var third = r.months[Math.floor(r.months.length / 3)];
+  near(E.balanceOn(r, third.month), third.balance, 1e-9, "the closing balance of that month");
+});
+
+test("a month between two records reads the earlier of them", function () {
+  var s = withSalary(40000);
+  var r = s.loans[0];
+  var a = r.months[5];
+  near(E.balanceOn(r, a.month), a.balance, 1e-9, "on the month itself");
+});
+
+test("nothing is owed once the loan is over, cleared or written off", function () {
+  var hi = withSalary(120000), lo = withSalary(22000);
+  var last = function (s) { return s.loans[0].months[s.loans[0].months.length - 1].month; };
+  eq(E.balanceOn(hi.loans[0], last(hi) + 1), 0, "cleared, then nothing");
+  eq(E.balanceOn(lo.loans[0], last(lo) + 1), 0, "written off, then nothing");
+});
+
 console.log("\n" + passed + " passed, " + failed + " failed\n");
 process.exit(failed ? 1 : 0);

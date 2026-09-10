@@ -155,6 +155,23 @@
     return base * Math.pow(1 + growth, Math.max(0, risenYears));
   }
 
+  /* What is outstanding at a given month — the balance as it stands, not as
+     it will stand. Before the first instalment there is nothing to owe; after
+     the last month there is nothing left, whether it was cleared or written
+     off. In between it is the closing balance of the most recent month. */
+  function balanceOn(r, monthIndex) {
+    var ms = r && r.months;
+    if (!ms || !ms.length) return 0;
+    if (monthIndex < ms[0].month) return 0;
+    if (monthIndex > ms[ms.length - 1].month) return 0;
+    var out = 0;
+    for (var i = 0; i < ms.length; i++) {
+      if (ms[i].month > monthIndex) break;
+      out = ms[i].balance;
+    }
+    return out;
+  }
+
   function thresholdFor(planKey, taxYear, a) {
     var plan = RULES[planKey];
     return upratedThreshold(plan.threshold, plan, taxYear, a.thresholdGrowth);
@@ -885,6 +902,7 @@
     opportunity: opportunity,
     breakEvenSavings: breakEvenSavings,
     thresholdFor: thresholdFor,
+    balanceOn: balanceOn,
     rpiFor: rpiFor,
     upperThresholdFor: upperThresholdFor,
     interestRate: interestRate,
