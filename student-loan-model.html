@@ -56,7 +56,7 @@
   --ui:  ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", Consolas, "Liberation Mono", monospace;
 
-  --panel-w: 328px;
+  --gut: clamp(1rem, 3vw, 2rem);
   --r: 10px;
 }
 
@@ -88,26 +88,26 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -.01em; }
 
 .app { display: block; }
 
-@media (min-width: 940px) {
-  .app {
-    display: grid;
-    grid-template-columns: var(--panel-w) minmax(0, 1fr);
-    height: 100vh;
-  }
-  /* Both are containing blocks as well as scroll boxes: an absolutely
-     positioned child of a static scroller escapes to the page itself and
-     drags the document out to its own depth, leaving dead space below. */
-  .panel { height: 100vh; overflow-y: auto; overscroll-behavior: contain; position: relative; }
-  .main  { height: 100vh; overflow-y: auto; overscroll-behavior: contain; position: relative; }
+/* The controls are a wide header rather than a column beside the results.
+   It pins to the top and you walk down it a section at a time; once you are
+   past the last one it closes to its bar, which stays, so the results have
+   the screen and any section is one click away. */
+.hdrwrap { display: contents; }
+.panel {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--line);
 }
+body.hdr-shut #form { display: none; }
+/* The header changes height as you walk it. Chrome compensates for content
+   resizing above the viewport by moving the scroll position, which moved the
+   walk on to the next section, which resized the header again. */
+body, .panel, #form { overflow-anchor: none; }
+html { scroll-padding-top: 4.5rem; }
 
 /* ---- control panel ----------------------------------------------------- */
 
-.panel {
-  background: var(--bg-2);
-  border-right: 1px solid var(--line);
-  padding: 0 0 3rem;
-}
+.panel__inner { padding: 0; }
 .panel__head { padding: 1.25rem 1.15rem 1rem; border-bottom: 1px solid var(--line); }
 .brand {
   margin: 0 0 .2rem; font-size: .66rem; letter-spacing: .18em;
@@ -279,7 +279,6 @@ select:hover { border-color: var(--ink-4); }
   padding: 1.6rem clamp(1rem, 3vw, 2rem) 1.4rem;
   border-bottom: 1px solid var(--line);
   background: linear-gradient(180deg, var(--bg-3), var(--bg));
-  position: sticky; top: 0; z-index: 5;
 }
 .hero__lead { min-width: 0; }
 .hero__label {
@@ -561,21 +560,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 /* ---- giving the dashboard the whole screen ----------------------------- */
 
 .panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
-.panel__toggle {
-  font: inherit; font-size: .68rem; font-weight: 700; letter-spacing: .04em; cursor: pointer;
-  padding: .28rem .5rem; border-radius: 6px; white-space: nowrap;
-  border: 1px solid var(--line-2); background: var(--bg-4); color: var(--ink-3);
-}
-.panel__toggle:hover { background: var(--bg-5); color: var(--ink); }
-
-@media (min-width: 940px) {
-  body.panel-shut .app { grid-template-columns: 54px minmax(0, 1fr); }
-  body.panel-shut .panel > form,
-  body.panel-shut .panel__head > div { display: none; }
-  body.panel-shut .panel__head { padding: 1rem .5rem; justify-content: center; }
-  body.panel-shut .panel__toggle { padding: .35rem .45rem; }
-}
-
 /* ---- the three headline boxes ------------------------------------------ */
 
 .bigs {
@@ -851,6 +835,157 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .sub:first-of-type { margin-top: 1.1rem; }
 .sub__note { margin: 0 0 .2rem; font-size: .74rem; color: var(--ink-4); }
 
+
+/* ---- the header, as a walk through the controls ------------------------ */
+
+.panel__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem 1.4rem; flex-wrap: wrap;
+  padding: .7rem var(--gut) .55rem;
+  border-bottom: 1px solid var(--line);
+}
+.panel__head h1 { font-size: .98rem; }
+.panel__head .brand { margin-bottom: .1rem; }
+
+.hdrnav { display: flex; flex-wrap: wrap; gap: .25rem; }
+.hdrnav button {
+  border: 1px solid transparent; background: none;
+  color: var(--ink-4); font: inherit; font-size: .76rem; font-weight: 600;
+  letter-spacing: .02em; padding: .3rem .6rem; border-radius: 999px;
+  cursor: pointer; white-space: nowrap;
+}
+.hdrnav button:hover { color: var(--ink-2); background: var(--bg-4); }
+.hdrnav button.is-on {
+  color: var(--live); background: var(--live-g); border-color: var(--live);
+}
+.hdrnav button i {
+  display: inline-block; width: .34rem; height: .34rem; border-radius: 50%;
+  background: currentColor; margin-right: .38rem; vertical-align: .12em;
+  opacity: .5;
+}
+.hdrnav button.is-on i { opacity: 1; }
+
+#form { padding: 0 var(--gut); }
+.grp {
+  border: 0; padding: 0; margin: 0;
+}
+/* Only the section you are on is laid out; the rest are out of the way
+   entirely, so the header keeps one height as you walk down it. */
+.grp[hidden] { display: none !important; }
+.grp__head {
+  display: flex; align-items: baseline; gap: .5rem;
+  justify-content: flex-start; padding: .75rem 0 .1rem;
+}
+/* Only a switch earns the far side of the heading. */
+.grp__head > .seg { margin-left: auto; }
+.grp__head h2 { margin: 0; font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); }
+.grp__sub { font-size: .72rem; color: var(--ink-4); }
+
+/* Inside a section the controls run across the width instead of down a
+   column: a section is a band, not a scroll. Anything that reads as one
+   thing across the page — a heading, a timeline, a sentence — takes the
+   whole row; the rest packs into columns. */
+/* display:grid on a class beats the browser's own [hidden] rule, which is
+   how all four income panes ended up on screen at once. */
+[hidden] { display: none !important; }
+.grp, .pane, .fold {
+  display: grid; align-items: start;
+  gap: .2rem 1.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+}
+.grp > .grp__head, .grp > .readout, .grp > .seg,
+.grp > .check, .grp > .btnrow, .grp > .pane, .grp > .fold,
+.pane > .readout, .pane > .hint, .pane > .lede,
+.pane > .tl, .pane > .tlkey, .pane > .btnrow, .pane > .seg,
+.pane > .picks, .pane > .draw, .pane > .scroll, .pane > .tabs,
+.fold > .check {
+  grid-column: 1 / -1;
+}
+/* A short aside sits in its column; only a full sentence takes the row. */
+.grp > .note, .pane > .note { grid-column: auto; align-self: start; }
+.grp > .grp__head + .note, #tlNote, #incomeLede { grid-column: 1 / -1; }
+/* The five profiles and the six professions run across a wide page rather
+   than down what used to be a 328px column. */
+.grp > .scens, .pane > .picks, .pane > .readout { grid-column: 1 / -1; }
+.scens, .picks {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+/* The mode tabs and the Course/Balance switch stop stretching once they have
+   said what they are. */
+.grp > .seg, .pane > .seg { justify-self: start; }
+.grp--scen .btnrow { justify-self: start; }
+/* The drawn curve does not need the whole page to be read. */
+.draw { max-width: 620px; }
+.tl { grid-column: 1 / -1; }
+
+@media (max-width: 939px) {
+  .panel { position: static; }
+  .hdrwrap { height: auto !important; }
+}
+
+
+/* A band is a row of controls that belongs together, spread across the page
+   rather than stacked down what used to be a narrow column. */
+.band {
+  grid-column: 1 / -1;
+  display: grid; align-items: start;
+  gap: .2rem 1.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+}
+.band > .ctl > .note { margin-bottom: .3rem; }
+
+/* The sentence that opens a section explains the whole of it, so it reads
+   across rather than down a 215px column. */
+.pane > .note:first-child { grid-column: 1 / -1; }
+
+/* One control left on its own should not stretch to the width of the page. */
+.grp > .ctl, .grp > select { max-width: 24rem; }
+.grp > .ctl { grid-column: auto; }
+
+
+/* A pane and a band are grouping, not layout: their children belong to the
+   section's own grid, so a control inside one can share a row with a control
+   outside it instead of being walled off into a column of its own. */
+.grp > .pane { display: contents; }
+[hidden].pane { display: none !important; }
+
+/* The colour key, the add button and the sentence under the track are each
+   a few words wide; they share a row rather than taking three. */
+.pane > .tlkey, .pane > .btnrow, #tlNote { grid-column: auto; align-self: center; }
+.pane > .tlkey { margin-bottom: 0; }
+
+
+/* The band stays a band. Left to pack themselves the money controls scatter
+   into whatever column happened to be free, and the eye has to hunt. */
+.band {
+  grid-column: 1 / -1;
+  display: grid; align-items: start;
+  gap: .2rem 1.6rem;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+}
+
+
+/* Compare: the five profiles on one row, and the three things under them on
+   the next, rather than a column of one-line rows down the left. */
+.scens, .picks { grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); }
+#grp-compare > .check, #grp-compare > .btnrow, #grp-compare > .note {
+  grid-column: auto; align-self: center;
+}
+#grp-compare > .btnrow { justify-self: start; }
+
+
+/* Six professions, one row, whatever the tracks would otherwise work out to. */
+@media (min-width: 1120px) { .picks { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 780px) and (max-width: 1119px) { .picks { grid-template-columns: repeat(3, 1fr); } }
+/* The line under them explains all six, so it reads across. */
+#pane-career > .note { grid-column: 1 / -1; }
+
+
+/* Narrow: every section on the page at once, and the pills are jump links. */
+@media (max-width: 939px) {
+  .grp + .grp { border-top: 1px solid var(--line); }
+}
+
 </style>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
@@ -860,22 +995,23 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 <div class="app">
 
   <!-- ==================================================================== -->
-  <!-- CONTROLS                                                             -->
+  <!-- CONTROLS — a wide header you scroll through, a section at a time      -->
   <!-- ==================================================================== -->
-  <aside class="panel" aria-label="Controls">
+  <div class="hdrwrap" id="hdrWrap">
+  <aside class="panel" id="panel" aria-label="Controls">
 
     <header class="panel__head">
       <div>
         <p class="brand">UK&nbsp;student&nbsp;finance</p>
         <h1>Repayment model</h1>
       </div>
-      <button type="button" id="panelToggle" class="panel__toggle" aria-expanded="true">← Hide controls</button>
+      <nav class="hdrnav" id="hdrNav" aria-label="Control sections"></nav>
     </header>
 
     <form id="form" novalidate>
 
       <!-- ---- scenarios ---- -->
-      <section class="grp grp--scen">
+      <section class="grp grp--scen" id="grp-compare" data-grp="Compare">
         <div class="grp__head"><h2>Compare</h2></div>
         <div class="scens" id="scenTabs" role="tablist" aria-label="Scenarios"></div>
         <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">Compare with paying upfront</span></label>
@@ -884,7 +1020,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       </section>
 
       <!-- ---- income profile ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-income" data-grp="Income">
         <div class="grp__head">
           <h2>Income <b class="who" id="whoIncome">A</b></h2>
         </div>
@@ -943,7 +1079,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       </section>
 
       <!-- ---- timeline ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-timeline" data-grp="Timeline">
         <div class="grp__head">
           <h2>Timeline</h2>
           <div class="seg" role="tablist" aria-label="How to describe the loan">
@@ -976,7 +1112,8 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
           <input type="hidden" id="workStartYear" value="2029" />
           <input type="checkbox" id="hasPgl" hidden />
 
-          <div id="pglRow" hidden>
+          <div class="band">
+<div id="pglRow" hidden>
             <div class="ctl">
               <div class="ctl__top">
                 <label for="pglBalance">Postgraduate borrowed</label>
@@ -997,6 +1134,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
               <span class="ctl__val"><i>£</i><input type="number" id="maintenance" min="0" max="30000" step="10" value="10830" data-slider="0,16000,10" /></span>
             </div>
             <select id="living"></select>
+          </div>
           </div>
 
           <p class="readout" id="borrowSummary"></p>
@@ -1028,7 +1166,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       </section>
 
       <!-- ---- extras ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-also" data-grp="Also">
         <div class="grp__head"><h2>Also</h2></div>
         <div class="ctl">
           <div class="ctl__top">
@@ -1046,7 +1184,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       </section>
 
       <!-- ---- savings ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-savings" data-grp="Savings">
         <div class="grp__head"><h2>Savings account</h2></div>
         <div class="ctl">
           <div class="ctl__top">
@@ -1060,8 +1198,8 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       </section>
 
       <!-- ---- assumptions ---- -->
-      <details class="grp grp--fold">
-        <summary><h2>Assumptions</h2><span>the unknowables</span></summary>
+      <section class="grp" id="grp-assumptions" data-grp="Assumptions">
+        <div class="grp__head"><h2>Assumptions</h2><span class="grp__sub">the unknowables</span></div>
         <div class="fold">
           <div class="ctl">
             <div class="ctl__top">
@@ -1091,10 +1229,11 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
           </div>
           <label class="check"><input type="checkbox" id="useCap" checked /> <span>Apply the announced 6% cap</span></label>
         </div>
-      </details>
+      </section>
 
     </form>
   </aside>
+  </div>
 
   <!-- ==================================================================== -->
   <!-- RESULTS                                                              -->
@@ -2222,7 +2361,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
   var state = {
     scen: [],                // the comparable runs
-    panelOpen: true,         // the controls, or the whole screen for the charts
     pgTouched: false,        // has the reader placed these dates themselves?
     workTouched: false,
     active: 0,               // which one the controls are editing
@@ -3272,7 +3410,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   function vizW(hostId, h, drawn) {
     var el = $(hostId), px = el ? el.clientWidth : 0;
     if (!px) return drawn;                    // not laid out yet; keep as drawn
-    var tall = Math.max(230, Math.min(360, Math.round(px * 0.34)));
+    var tall = Math.max(190, Math.min(270, Math.round(px * 0.26)));
     return Math.round(h * px / tall);
   }
 
@@ -4451,7 +4589,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
         loanMode: state.loanMode, incomeMode: state.incomeMode,
         manual: state.manual, manualYears: state.manualYears,
         scen: state.scen, active: state.active, showNoLoan: state.showNoLoan,
-        panelOpen: state.panelOpen,
         pgTouched: state.pgTouched, workTouched: state.workTouched
       }, fields: {} };
       FIELDS.forEach(function (id) {
@@ -4490,7 +4627,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
         }
         if (typeof data.state.active === "number") state.active = data.state.active;
         if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
-        if (typeof data.state.panelOpen === "boolean") state.panelOpen = data.state.panelOpen;
         state.pgTouched = !!data.state.pgTouched;
         state.workTouched = !!data.state.workTouched;
       }
@@ -4716,13 +4852,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
     $("downloadCsv").addEventListener("click", download);
 
-    $("panelToggle").addEventListener("click", function () {
-      state.panelOpen = !state.panelOpen;
-      applyPanel();
-      if (lastRuns) renderAllCharts(lastRuns);   // the charts have more room now
-      save();
-    });
-
     // Settings persist, which is right until the page changes underneath
     // them — a profile saved last week can outlive the thing that made it.
     $("resetAll").addEventListener("click", function () {
@@ -4762,12 +4891,104 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     syncSliders();
   }
 
-  function applyPanel() {
-    document.body.classList.toggle("panel-shut", !state.panelOpen);
-    var btn = $("panelToggle");
-    btn.setAttribute("aria-expanded", state.panelOpen ? "true" : "false");
-    btn.textContent = state.panelOpen ? "\u2190 Hide controls" : "\u2192";
-    btn.title = state.panelOpen ? "Hide the controls" : "Show the controls";
+  /* ---- the header, walked through ----------------------------------------
+   * The controls used to be a column beside the results. They are a band
+   * across the top now, one section at a time: the header sticks while you
+   * scroll the length of it, and each section gives way to the next as you
+   * pass it. Which one is open is a function of how far you have scrolled,
+   * not of anything the sections themselves measure — so opening one cannot
+   * move the ground and set off the next.
+   * ---------------------------------------------------------------------- */
+
+  var HDR_STEP = 130;          // scroll to spend on each section
+  var hdrGrps = [], hdrAt = -2;
+
+  // Narrow enough and there is no room to pin a header and walk it: the
+  // sections all show at once and the page is simply scrolled, or the walk
+  // would advance off-screen where nobody could see it or reach it.
+  function hdrNarrow() {
+    return window.matchMedia("(max-width: 939px)").matches;
+  }
+
+  function hdrShowAll() {
+    hdrGrps.forEach(function (g) { g.el.hidden = false; });
+    Array.prototype.forEach.call($("hdrNav").children, function (b) {
+      b.classList.remove("is-on");
+      b.removeAttribute("aria-current");
+    });
+    hdrAt = -2;
+    document.body.classList.remove("hdr-shut");
+    buildIncomeChart();
+    renderTimelineTrack();
+    fitSliders();
+    syncSliders();
+  }
+
+  // -1 means every section closed: you have walked past the controls and the
+  // header is down to its bar, which stays so you can get back to any of them.
+  function hdrShow(i) {
+    if (!hdrGrps.length || hdrNarrow()) return;
+    i = clamp(i, -1, hdrGrps.length - 1);
+    if (i === hdrAt) return;
+    hdrAt = i;
+    hdrGrps.forEach(function (g, k) { g.el.hidden = k !== i; });
+    Array.prototype.forEach.call($("hdrNav").children, function (b, k) {
+      b.classList.toggle("is-on", k === i);
+      b.setAttribute("aria-current", k === i ? "true" : "false");
+    });
+    document.body.classList.toggle("hdr-shut", i < 0);
+    if (i < 0) return;
+    // A section that owns a chart has to draw it now it has a width.
+    if (hdrGrps[i].el.querySelector("#drawChart")) buildIncomeChart();
+    if (hdrGrps[i].el.querySelector("#tlTrack")) renderTimelineTrack();
+    fitSliders();
+    syncSliders();
+  }
+
+  function hdrOnScroll() {
+    if (hdrNarrow()) return;
+    var y = window.scrollY || window.pageYOffset || 0;
+    hdrShow(y >= HDR_STEP * hdrGrps.length ? -1 : Math.floor(y / HDR_STEP));
+  }
+
+  function hdrApply() {
+    if (hdrNarrow()) { hdrShowAll(); return; }
+    hdrAt = -2;
+    hdrOnScroll();
+  }
+
+  function buildHeaderNav() {
+    var nav = $("hdrNav"), form = $("form");
+    if (!nav || !form) return;
+    hdrGrps = Array.prototype.map.call(form.querySelectorAll("[data-grp]"), function (el) {
+      return { el: el, name: el.dataset.grp };
+    });
+    nav.innerHTML = hdrGrps.map(function (g, i) {
+      return '<button type="button" data-go="' + i + '"><i></i>' + g.name + "</button>";
+    }).join("");
+    nav.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-go]");
+      if (!b) return;
+      var i = Number(b.dataset.go);
+      if (hdrNarrow()) {
+        hdrGrps[i].el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      // Move the page back to where that section lives; the scroll handler
+      // opens it on the way, and opens it now in case the page is already there.
+      window.scrollTo({ top: i * HDR_STEP + 4, behavior: "smooth" });
+      hdrShow(i);
+    });
+    hdrApply();
+    window.addEventListener("scroll", hdrOnScroll, { passive: true });
+    var settle = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(settle);
+      settle = setTimeout(function () {
+        hdrApply();
+        if (lastRuns) renderAllCharts(lastRuns);
+      }, 120);
+    });
   }
 
   function toggleYear(y) {
@@ -4793,7 +5014,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     });
     fitSliders();
     $("showNoLoan").checked = state.showNoLoan;
-    applyPanel();
     loadScenario();
     fitSliders();
     markScens();
@@ -4805,6 +5025,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     wireIncomeChart();
     wireTimelineTrack();
     renderTimelineTrack();
+    buildHeaderNav();
     run();
   }
 

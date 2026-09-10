@@ -6,7 +6,7 @@
 <meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
 <meta name="color-scheme" content="dark" />
 <title>Student loan · repayment model</title>
-<link rel="stylesheet" href="loan.css?v=ceacb684" />
+<link rel="stylesheet" href="loan.css?v=1fa449b7" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -15,22 +15,23 @@
 <div class="app">
 
   <!-- ==================================================================== -->
-  <!-- CONTROLS                                                             -->
+  <!-- CONTROLS — a wide header you scroll through, a section at a time      -->
   <!-- ==================================================================== -->
-  <aside class="panel" aria-label="Controls">
+  <div class="hdrwrap" id="hdrWrap">
+  <aside class="panel" id="panel" aria-label="Controls">
 
     <header class="panel__head">
       <div>
         <p class="brand">UK&nbsp;student&nbsp;finance</p>
         <h1>Repayment model</h1>
       </div>
-      <button type="button" id="panelToggle" class="panel__toggle" aria-expanded="true">← Hide controls</button>
+      <nav class="hdrnav" id="hdrNav" aria-label="Control sections"></nav>
     </header>
 
     <form id="form" novalidate>
 
       <!-- ---- scenarios ---- -->
-      <section class="grp grp--scen">
+      <section class="grp grp--scen" id="grp-compare" data-grp="Compare">
         <div class="grp__head"><h2>Compare</h2></div>
         <div class="scens" id="scenTabs" role="tablist" aria-label="Scenarios"></div>
         <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">Compare with paying upfront</span></label>
@@ -39,7 +40,7 @@
       </section>
 
       <!-- ---- income profile ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-income" data-grp="Income">
         <div class="grp__head">
           <h2>Income <b class="who" id="whoIncome">A</b></h2>
         </div>
@@ -98,7 +99,7 @@
       </section>
 
       <!-- ---- timeline ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-timeline" data-grp="Timeline">
         <div class="grp__head">
           <h2>Timeline</h2>
           <div class="seg" role="tablist" aria-label="How to describe the loan">
@@ -131,7 +132,8 @@
           <input type="hidden" id="workStartYear" value="2029" />
           <input type="checkbox" id="hasPgl" hidden />
 
-          <div id="pglRow" hidden>
+          <div class="band">
+<div id="pglRow" hidden>
             <div class="ctl">
               <div class="ctl__top">
                 <label for="pglBalance">Postgraduate borrowed</label>
@@ -152,6 +154,7 @@
               <span class="ctl__val"><i>£</i><input type="number" id="maintenance" min="0" max="30000" step="10" value="10830" data-slider="0,16000,10" /></span>
             </div>
             <select id="living"></select>
+          </div>
           </div>
 
           <p class="readout" id="borrowSummary"></p>
@@ -183,7 +186,7 @@
       </section>
 
       <!-- ---- extras ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-also" data-grp="Also">
         <div class="grp__head"><h2>Also</h2></div>
         <div class="ctl">
           <div class="ctl__top">
@@ -201,7 +204,7 @@
       </section>
 
       <!-- ---- savings ---- -->
-      <section class="grp">
+      <section class="grp" id="grp-savings" data-grp="Savings">
         <div class="grp__head"><h2>Savings account</h2></div>
         <div class="ctl">
           <div class="ctl__top">
@@ -215,8 +218,8 @@
       </section>
 
       <!-- ---- assumptions ---- -->
-      <details class="grp grp--fold">
-        <summary><h2>Assumptions</h2><span>the unknowables</span></summary>
+      <section class="grp" id="grp-assumptions" data-grp="Assumptions">
+        <div class="grp__head"><h2>Assumptions</h2><span class="grp__sub">the unknowables</span></div>
         <div class="fold">
           <div class="ctl">
             <div class="ctl__top">
@@ -246,10 +249,11 @@
           </div>
           <label class="check"><input type="checkbox" id="useCap" checked /> <span>Apply the announced 6% cap</span></label>
         </div>
-      </details>
+      </section>
 
     </form>
   </aside>
+  </div>
 
   <!-- ==================================================================== -->
   <!-- RESULTS                                                              -->
@@ -416,7 +420,7 @@
   </main>
 </div>
 
-<script src="engine.js?v=ceacb684"></script>
-<script src="loan.js?v=ceacb684" defer></script>
+<script src="engine.js?v=1fa449b7"></script>
+<script src="loan.js?v=1fa449b7" defer></script>
 </body>
 </html>

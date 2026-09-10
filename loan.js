@@ -89,7 +89,6 @@
 
   var state = {
     scen: [],                // the comparable runs
-    panelOpen: true,         // the controls, or the whole screen for the charts
     pgTouched: false,        // has the reader placed these dates themselves?
     workTouched: false,
     active: 0,               // which one the controls are editing
@@ -1139,7 +1138,7 @@
   function vizW(hostId, h, drawn) {
     var el = $(hostId), px = el ? el.clientWidth : 0;
     if (!px) return drawn;                    // not laid out yet; keep as drawn
-    var tall = Math.max(230, Math.min(360, Math.round(px * 0.34)));
+    var tall = Math.max(190, Math.min(270, Math.round(px * 0.26)));
     return Math.round(h * px / tall);
   }
 
@@ -2318,7 +2317,6 @@
         loanMode: state.loanMode, incomeMode: state.incomeMode,
         manual: state.manual, manualYears: state.manualYears,
         scen: state.scen, active: state.active, showNoLoan: state.showNoLoan,
-        panelOpen: state.panelOpen,
         pgTouched: state.pgTouched, workTouched: state.workTouched
       }, fields: {} };
       FIELDS.forEach(function (id) {
@@ -2357,7 +2355,6 @@
         }
         if (typeof data.state.active === "number") state.active = data.state.active;
         if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
-        if (typeof data.state.panelOpen === "boolean") state.panelOpen = data.state.panelOpen;
         state.pgTouched = !!data.state.pgTouched;
         state.workTouched = !!data.state.workTouched;
       }
@@ -2583,13 +2580,6 @@
 
     $("downloadCsv").addEventListener("click", download);
 
-    $("panelToggle").addEventListener("click", function () {
-      state.panelOpen = !state.panelOpen;
-      applyPanel();
-      if (lastRuns) renderAllCharts(lastRuns);   // the charts have more room now
-      save();
-    });
-
     // Settings persist, which is right until the page changes underneath
     // them — a profile saved last week can outlive the thing that made it.
     $("resetAll").addEventListener("click", function () {
@@ -2629,12 +2619,104 @@
     syncSliders();
   }
 
-  function applyPanel() {
-    document.body.classList.toggle("panel-shut", !state.panelOpen);
-    var btn = $("panelToggle");
-    btn.setAttribute("aria-expanded", state.panelOpen ? "true" : "false");
-    btn.textContent = state.panelOpen ? "\u2190 Hide controls" : "\u2192";
-    btn.title = state.panelOpen ? "Hide the controls" : "Show the controls";
+  /* ---- the header, walked through ----------------------------------------
+   * The controls used to be a column beside the results. They are a band
+   * across the top now, one section at a time: the header sticks while you
+   * scroll the length of it, and each section gives way to the next as you
+   * pass it. Which one is open is a function of how far you have scrolled,
+   * not of anything the sections themselves measure — so opening one cannot
+   * move the ground and set off the next.
+   * ---------------------------------------------------------------------- */
+
+  var HDR_STEP = 130;          // scroll to spend on each section
+  var hdrGrps = [], hdrAt = -2;
+
+  // Narrow enough and there is no room to pin a header and walk it: the
+  // sections all show at once and the page is simply scrolled, or the walk
+  // would advance off-screen where nobody could see it or reach it.
+  function hdrNarrow() {
+    return window.matchMedia("(max-width: 939px)").matches;
+  }
+
+  function hdrShowAll() {
+    hdrGrps.forEach(function (g) { g.el.hidden = false; });
+    Array.prototype.forEach.call($("hdrNav").children, function (b) {
+      b.classList.remove("is-on");
+      b.removeAttribute("aria-current");
+    });
+    hdrAt = -2;
+    document.body.classList.remove("hdr-shut");
+    buildIncomeChart();
+    renderTimelineTrack();
+    fitSliders();
+    syncSliders();
+  }
+
+  // -1 means every section closed: you have walked past the controls and the
+  // header is down to its bar, which stays so you can get back to any of them.
+  function hdrShow(i) {
+    if (!hdrGrps.length || hdrNarrow()) return;
+    i = clamp(i, -1, hdrGrps.length - 1);
+    if (i === hdrAt) return;
+    hdrAt = i;
+    hdrGrps.forEach(function (g, k) { g.el.hidden = k !== i; });
+    Array.prototype.forEach.call($("hdrNav").children, function (b, k) {
+      b.classList.toggle("is-on", k === i);
+      b.setAttribute("aria-current", k === i ? "true" : "false");
+    });
+    document.body.classList.toggle("hdr-shut", i < 0);
+    if (i < 0) return;
+    // A section that owns a chart has to draw it now it has a width.
+    if (hdrGrps[i].el.querySelector("#drawChart")) buildIncomeChart();
+    if (hdrGrps[i].el.querySelector("#tlTrack")) renderTimelineTrack();
+    fitSliders();
+    syncSliders();
+  }
+
+  function hdrOnScroll() {
+    if (hdrNarrow()) return;
+    var y = window.scrollY || window.pageYOffset || 0;
+    hdrShow(y >= HDR_STEP * hdrGrps.length ? -1 : Math.floor(y / HDR_STEP));
+  }
+
+  function hdrApply() {
+    if (hdrNarrow()) { hdrShowAll(); return; }
+    hdrAt = -2;
+    hdrOnScroll();
+  }
+
+  function buildHeaderNav() {
+    var nav = $("hdrNav"), form = $("form");
+    if (!nav || !form) return;
+    hdrGrps = Array.prototype.map.call(form.querySelectorAll("[data-grp]"), function (el) {
+      return { el: el, name: el.dataset.grp };
+    });
+    nav.innerHTML = hdrGrps.map(function (g, i) {
+      return '<button type="button" data-go="' + i + '"><i></i>' + g.name + "</button>";
+    }).join("");
+    nav.addEventListener("click", function (ev) {
+      var b = ev.target.closest("[data-go]");
+      if (!b) return;
+      var i = Number(b.dataset.go);
+      if (hdrNarrow()) {
+        hdrGrps[i].el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      // Move the page back to where that section lives; the scroll handler
+      // opens it on the way, and opens it now in case the page is already there.
+      window.scrollTo({ top: i * HDR_STEP + 4, behavior: "smooth" });
+      hdrShow(i);
+    });
+    hdrApply();
+    window.addEventListener("scroll", hdrOnScroll, { passive: true });
+    var settle = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(settle);
+      settle = setTimeout(function () {
+        hdrApply();
+        if (lastRuns) renderAllCharts(lastRuns);
+      }, 120);
+    });
   }
 
   function toggleYear(y) {
@@ -2660,7 +2742,6 @@
     });
     fitSliders();
     $("showNoLoan").checked = state.showNoLoan;
-    applyPanel();
     loadScenario();
     fitSliders();
     markScens();
@@ -2672,6 +2753,7 @@
     wireIncomeChart();
     wireTimelineTrack();
     renderTimelineTrack();
+    buildHeaderNav();
     run();
   }
 
