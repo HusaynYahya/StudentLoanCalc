@@ -958,6 +958,73 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   body.panel-shut .panel__toggle { padding: .35rem .45rem; }
 }
 
+/* ---- where a number came from ------------------------------------------ *
+ * A figure that can be asked about should look like one. Dotted underline,
+ * the same weight as the number, so it reads as an invitation rather than a
+ * link. */
+.xp {
+  cursor: help;
+  border-bottom: 1px dashed color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 2px;
+}
+.xp:hover { border-bottom-color: currentColor; background: color-mix(in srgb, currentColor 8%, transparent); }
+.xp:focus-visible { outline: 2px solid var(--good); outline-offset: 2px; }
+
+.xp__panel { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; }
+.xp__veil { position: absolute; inset: 0; background: rgba(4, 6, 10, .62); }
+.xp__sheet {
+  position: relative; width: min(560px, 100%); max-height: min(78vh, 720px);
+  display: flex; flex-direction: column;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: var(--r) var(--r) 0 0; border-bottom: 0;
+  box-shadow: 0 -18px 50px -12px rgba(0, 0, 0, .65);
+}
+@media (min-width: 720px) {
+  .xp__panel { place-items: center; }
+  .xp__sheet { border-radius: var(--r); border-bottom: 1px solid var(--line); }
+}
+.xp__head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  padding: 1rem 1.15rem .7rem; border-bottom: 1px solid var(--line);
+}
+.xp__head h3 { margin: 0; font-size: 1rem; color: var(--ink); }
+.xp__close {
+  flex: none; width: 1.9rem; height: 1.9rem; line-height: 1; font-size: 1.1rem;
+  border: 1px solid var(--line-2); border-radius: 7px;
+  background: var(--bg-4); color: var(--ink-3); cursor: pointer;
+}
+.xp__close:hover { background: var(--bg-5); color: var(--ink); }
+.xp__scroll { overflow-y: auto; padding: .9rem 1.15rem 1.2rem; }
+.xp__scroll h4 {
+  margin: 1.1rem 0 .35rem; font-size: .7rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-4);
+}
+.xp__what { margin: 0; font-size: .92rem; line-height: 1.55; color: var(--ink); }
+.xp__how { margin: 0; padding-left: 1.15rem; }
+.xp__how li { margin: .3rem 0; font-size: .84rem; line-height: 1.55; color: var(--ink-2); }
+.xp__rests { margin: 0; padding: 0; list-style: none; }
+.xp__rests li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: .8rem;
+  padding: .32rem 0; border-bottom: 1px solid var(--line-2);
+}
+.xp__rests li span { font-family: var(--num); font-size: .8rem; color: var(--ink-2); }
+.xp__go {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: .82rem; color: var(--good);
+  text-decoration: underline; text-underline-offset: 2px; text-align: left;
+}
+.xp__go:hover { color: var(--ink); }
+.xp__careful {
+  margin: 0; padding: .6rem .75rem; border-radius: 7px;
+  background: var(--warn-bg, rgba(245,165,36,.1));
+  border-left: 2px solid var(--warn);
+  font-size: .82rem; line-height: 1.55; color: var(--ink-2);
+}
+body.xp-open { overflow: hidden; }
+
+/* The control an explanation sent you to, lit briefly so it can be found. */
+.is-lit { outline: 2px solid var(--good); outline-offset: 3px; border-radius: 4px; }
+
 </style>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
@@ -1367,6 +1434,20 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     </section>
 
   </main>
+</div>
+
+<!-- ==================================================================== -->
+<!-- WHERE A NUMBER CAME FROM                                             -->
+<!-- ==================================================================== -->
+<div class="xp__panel" id="xpPanel" role="dialog" aria-modal="true" aria-labelledby="xpTitle" hidden>
+  <div class="xp__veil"></div>
+  <div class="xp__sheet">
+    <div class="xp__head">
+      <h3 id="xpTitle"></h3>
+      <button type="button" id="xpClose" class="xp__close" aria-label="Close">×</button>
+    </div>
+    <div class="xp__scroll" id="xpBody"></div>
+  </div>
 </div>
 
 <script>
@@ -5016,6 +5097,32 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     } catch (e) { /* private browsing, or storage refused — the tool still works */ }
   }
 
+  /* A profile off the disk is not a profile this version wrote. Anything it
+     names may have been renamed or removed since — and a name that resolves
+     to nothing is not a wrong answer, it is a page that does not load at all:
+     init() throws before wire() runs, so not one control is live, "Start
+     over" included, and a reload does it again. Every stored profile is
+     mended into something this version can read. */
+  function mendScenario(s, i) {
+    var blank = blankScenario(i);
+    if (!s || typeof s !== "object") return blank;
+    // Assigning into `blank` would mutate the very defaults the fallbacks
+    // below read from, and an unknown plan would be repaired to itself.
+    var out = Object.assign({}, blank, s);
+    if (!E.RULES[out.plan]) out.plan = blank.plan;
+    if (!CAREERS.some(function (c) { return c.id === out.career; })) out.career = "grad";
+    if (MODES.indexOf(out.mode) < 0) out.mode = "career";
+    if (!Array.isArray(out.points)) out.points = null;
+    else out.points = out.points.filter(function (q) {
+      return q && isFinite(q.t) && isFinite(q.v);
+    });
+    ["startSalary", "growth", "overpay", "manualYears"].forEach(function (k) {
+      if (!isFinite(Number(out[k]))) out[k] = blank[k];
+    });
+    if (!Array.isArray(out.breaks)) out.breaks = [];
+    return out;
+  }
+
   function restore() {
     try {
       var raw = localStorage.getItem(STORE);
@@ -5033,16 +5140,15 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
         state.manual = data.state.manual || {};
         state.manualYears = data.state.manualYears || 12;
         if (Array.isArray(data.state.scen) && data.state.scen.length === SCEN_META.length) {
-          state.scen = data.state.scen;
-          // A profile saved before the path list was trimmed may name one that
-          // has gone. Move it to the nearest thing rather than leaving it
-          // pointing at nothing.
-          state.scen.forEach(function (s) {
-            var known = CAREERS.some(function (c) { return c.id === s.career; });
-            if (!known) s.career = "grad";
+          state.scen = data.state.scen.map(function (s, i) {
+            return mendScenario(s, i);
           });
         }
-        if (typeof data.state.active === "number") state.active = data.state.active;
+        // A stored index that is out of range points at nothing, and every
+        // read of the active profile then dereferences undefined.
+        if (typeof data.state.active === "number") {
+          state.active = clamp(Math.round(data.state.active), 0, SCEN_META.length - 1);
+        }
         if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
         if (typeof data.state.panelOpen === "boolean") state.panelOpen = data.state.panelOpen;
         state.pgTouched = !!data.state.pgTouched;
@@ -5152,7 +5258,8 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       rpi: "RPI",
       rpiPlus3: "RPI + 3%",
       lowerOfRpiAndBase: "the lower of RPI and base rate + 1%",
-      slidingScale: "RPI below the threshold, rising to RPI + 3% by £49,130"
+      slidingScale: "RPI below the threshold, rising to RPI + 3% by " +
+        gbp(E.RULES.plan2.upperThreshold)
     };
     $("rulesRows").innerHTML = ["plan1", "plan2", "plan4", "plan5", "pgl"].map(function (k) {
       var p = E.RULES[k];
@@ -5339,6 +5446,13 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     fillRulesTable();
     buildCareerCards();
     buildScenTabs();
+
+    // Wired before anything that reads stored state. Whatever else goes
+    // wrong below, "Start over" is live and can clear the storage that
+    // caused it — otherwise a bad save is a page that cannot be recovered
+    // from inside the page.
+    wire();
+
     state.scen = [0,1,2,3,4].map(blankScenario);
     var restored = restore();
     if (!restored) {
@@ -5359,7 +5473,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     if (!state.workTouched) $("workStartYear").value = defaultWorkStart(timeline());
     if (!state.pgTouched) $("pgStartYear").value = timeline().ugEnds;
     syncSliders();
-    wire();
     wireIncomeChart();
     wireExplain();
     wireTimelineTrack();

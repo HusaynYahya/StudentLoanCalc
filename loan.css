@@ -948,3 +948,70 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   body.panel-shut .panel__head { padding: 1rem .5rem; justify-content: center; }
   body.panel-shut .panel__toggle { padding: .35rem .45rem; }
 }
+
+/* ---- where a number came from ------------------------------------------ *
+ * A figure that can be asked about should look like one. Dotted underline,
+ * the same weight as the number, so it reads as an invitation rather than a
+ * link. */
+.xp {
+  cursor: help;
+  border-bottom: 1px dashed color-mix(in srgb, currentColor 45%, transparent);
+  border-radius: 2px;
+}
+.xp:hover { border-bottom-color: currentColor; background: color-mix(in srgb, currentColor 8%, transparent); }
+.xp:focus-visible { outline: 2px solid var(--good); outline-offset: 2px; }
+
+.xp__panel { position: fixed; inset: 0; z-index: 60; display: grid; place-items: end center; }
+.xp__veil { position: absolute; inset: 0; background: rgba(4, 6, 10, .62); }
+.xp__sheet {
+  position: relative; width: min(560px, 100%); max-height: min(78vh, 720px);
+  display: flex; flex-direction: column;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: var(--r) var(--r) 0 0; border-bottom: 0;
+  box-shadow: 0 -18px 50px -12px rgba(0, 0, 0, .65);
+}
+@media (min-width: 720px) {
+  .xp__panel { place-items: center; }
+  .xp__sheet { border-radius: var(--r); border-bottom: 1px solid var(--line); }
+}
+.xp__head {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;
+  padding: 1rem 1.15rem .7rem; border-bottom: 1px solid var(--line);
+}
+.xp__head h3 { margin: 0; font-size: 1rem; color: var(--ink); }
+.xp__close {
+  flex: none; width: 1.9rem; height: 1.9rem; line-height: 1; font-size: 1.1rem;
+  border: 1px solid var(--line-2); border-radius: 7px;
+  background: var(--bg-4); color: var(--ink-3); cursor: pointer;
+}
+.xp__close:hover { background: var(--bg-5); color: var(--ink); }
+.xp__scroll { overflow-y: auto; padding: .9rem 1.15rem 1.2rem; }
+.xp__scroll h4 {
+  margin: 1.1rem 0 .35rem; font-size: .7rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-4);
+}
+.xp__what { margin: 0; font-size: .92rem; line-height: 1.55; color: var(--ink); }
+.xp__how { margin: 0; padding-left: 1.15rem; }
+.xp__how li { margin: .3rem 0; font-size: .84rem; line-height: 1.55; color: var(--ink-2); }
+.xp__rests { margin: 0; padding: 0; list-style: none; }
+.xp__rests li {
+  display: flex; align-items: baseline; justify-content: space-between; gap: .8rem;
+  padding: .32rem 0; border-bottom: 1px solid var(--line-2);
+}
+.xp__rests li span { font-family: var(--num); font-size: .8rem; color: var(--ink-2); }
+.xp__go {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; font-size: .82rem; color: var(--good);
+  text-decoration: underline; text-underline-offset: 2px; text-align: left;
+}
+.xp__go:hover { color: var(--ink); }
+.xp__careful {
+  margin: 0; padding: .6rem .75rem; border-radius: 7px;
+  background: var(--warn-bg, rgba(245,165,36,.1));
+  border-left: 2px solid var(--warn);
+  font-size: .82rem; line-height: 1.55; color: var(--ink-2);
+}
+body.xp-open { overflow: hidden; }
+
+/* The control an explanation sent you to, lit briefly so it can be found. */
+.is-lit { outline: 2px solid var(--good); outline-offset: 3px; border-radius: 4px; }

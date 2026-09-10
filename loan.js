@@ -2676,6 +2676,32 @@
     } catch (e) { /* private browsing, or storage refused — the tool still works */ }
   }
 
+  /* A profile off the disk is not a profile this version wrote. Anything it
+     names may have been renamed or removed since — and a name that resolves
+     to nothing is not a wrong answer, it is a page that does not load at all:
+     init() throws before wire() runs, so not one control is live, "Start
+     over" included, and a reload does it again. Every stored profile is
+     mended into something this version can read. */
+  function mendScenario(s, i) {
+    var blank = blankScenario(i);
+    if (!s || typeof s !== "object") return blank;
+    // Assigning into `blank` would mutate the very defaults the fallbacks
+    // below read from, and an unknown plan would be repaired to itself.
+    var out = Object.assign({}, blank, s);
+    if (!E.RULES[out.plan]) out.plan = blank.plan;
+    if (!CAREERS.some(function (c) { return c.id === out.career; })) out.career = "grad";
+    if (MODES.indexOf(out.mode) < 0) out.mode = "career";
+    if (!Array.isArray(out.points)) out.points = null;
+    else out.points = out.points.filter(function (q) {
+      return q && isFinite(q.t) && isFinite(q.v);
+    });
+    ["startSalary", "growth", "overpay", "manualYears"].forEach(function (k) {
+      if (!isFinite(Number(out[k]))) out[k] = blank[k];
+    });
+    if (!Array.isArray(out.breaks)) out.breaks = [];
+    return out;
+  }
+
   function restore() {
     try {
       var raw = localStorage.getItem(STORE);
@@ -2693,16 +2719,15 @@
         state.manual = data.state.manual || {};
         state.manualYears = data.state.manualYears || 12;
         if (Array.isArray(data.state.scen) && data.state.scen.length === SCEN_META.length) {
-          state.scen = data.state.scen;
-          // A profile saved before the path list was trimmed may name one that
-          // has gone. Move it to the nearest thing rather than leaving it
-          // pointing at nothing.
-          state.scen.forEach(function (s) {
-            var known = CAREERS.some(function (c) { return c.id === s.career; });
-            if (!known) s.career = "grad";
+          state.scen = data.state.scen.map(function (s, i) {
+            return mendScenario(s, i);
           });
         }
-        if (typeof data.state.active === "number") state.active = data.state.active;
+        // A stored index that is out of range points at nothing, and every
+        // read of the active profile then dereferences undefined.
+        if (typeof data.state.active === "number") {
+          state.active = clamp(Math.round(data.state.active), 0, SCEN_META.length - 1);
+        }
         if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
         if (typeof data.state.panelOpen === "boolean") state.panelOpen = data.state.panelOpen;
         state.pgTouched = !!data.state.pgTouched;
@@ -2812,7 +2837,8 @@
       rpi: "RPI",
       rpiPlus3: "RPI + 3%",
       lowerOfRpiAndBase: "the lower of RPI and base rate + 1%",
-      slidingScale: "RPI below the threshold, rising to RPI + 3% by £49,130"
+      slidingScale: "RPI below the threshold, rising to RPI + 3% by " +
+        gbp(E.RULES.plan2.upperThreshold)
     };
     $("rulesRows").innerHTML = ["plan1", "plan2", "plan4", "plan5", "pgl"].map(function (k) {
       var p = E.RULES[k];
@@ -2999,6 +3025,13 @@
     fillRulesTable();
     buildCareerCards();
     buildScenTabs();
+
+    // Wired before anything that reads stored state. Whatever else goes
+    // wrong below, "Start over" is live and can clear the storage that
+    // caused it — otherwise a bad save is a page that cannot be recovered
+    // from inside the page.
+    wire();
+
     state.scen = [0,1,2,3,4].map(blankScenario);
     var restored = restore();
     if (!restored) {
@@ -3019,7 +3052,6 @@
     if (!state.workTouched) $("workStartYear").value = defaultWorkStart(timeline());
     if (!state.pgTouched) $("pgStartYear").value = timeline().ugEnds;
     syncSliders();
-    wire();
     wireIncomeChart();
     wireExplain();
     wireTimelineTrack();
