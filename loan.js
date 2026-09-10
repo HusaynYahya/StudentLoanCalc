@@ -938,7 +938,9 @@
 
     $("barsChart").innerHTML =
       '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Lifetime cost of each scenario">' + body + "</svg>";
-    $("barsKey").innerHTML = '<i style="color:var(--ink-4)">Cash handed over across the whole term</i>';
+    $("barsKey").innerHTML =
+      '<i style="color:var(--ink-4)">Cash handed over across the whole term</i>' +
+      '<i style="color:var(--ink-4)">money spent sooner costs more than the same sum spent later — see the profile panel</i>';
   }
 
   /* ---- the alternative: find the money yourself -------------------------- *
@@ -1052,6 +1054,13 @@
     var firstPaid = repaying.filter(function (y) { return y.monthlyRepayment > 0; })[0];
     var peak = repaying.reduce(function (m, y) { return Math.max(m, y.monthlyRepayment); }, 0);
 
+    // All three lives priced at the year the loan ends, so they can be
+    // compared without the timing doing the arguing.
+    var endLabel = o.years
+      ? E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1)
+      : "the end";
+    var g3 = "All three, priced at " + endLabel;
+
     var rows = [
       { g: "The loan", k: "Borrowed", v: gbp(r.borrowed) },
       { g: "The loan", k: "Owed when repayment starts", v: gbp(r.balanceAtRepayStart) },
@@ -1068,16 +1077,15 @@
         v: r.everRepaidInFull ? r.clearedLabel : gbp(r.writtenOff) + " in " + r.writeOffLabel,
         c: r.everRepaidInFull ? "good" : "bad" },
 
-      { g: "Or you could have saved it", k: "Clear it today, in one payment", v: gbp(o.lump) },
-      { g: "Or you could have saved it", k: "…that lump, saved for " + o.years + " years",
-        v: money(o.fvLump, o.realFvLump) },
-      { g: "Or you could have saved it", k: "Your repayments, saved as you go",
-        v: money(o.fvRepayments, o.realFvRepayments) },
-      { g: "Or you could have saved it", k: "Cheaper option",
-        v: o.clearingIsBetter ? "clear it today" : "keep the money",
-        c: o.clearingIsBetter ? "warn" : "good" },
-      { g: "Or you could have saved it", k: "By",
-        v: money(Math.abs(o.clearingSaves), Math.abs(o.realClearingSaves)) }
+      { g: g3, k: "Borrow and repay", v: money(o.fvRepayments, o.realFvRepayments),
+        c: o.cheapest && o.cheapest.key === "repay" ? "good" : "" },
+      { g: g3, k: "Pay the fees in cash", v: money(o.fvUpfront, o.realFvUpfront),
+        c: o.cheapest && o.cheapest.key === "upfront" ? "good" : "" },
+      { g: g3, k: "Clear the balance today", v: money(o.fvLump, o.realFvLump),
+        c: o.cheapest && o.cheapest.key === "clear" ? "good" : "" },
+      { g: g3, k: "Cheapest", v: o.cheapest ? o.cheapest.label : "\u2014", c: "good" },
+      { g: g3, k: "In cash, before any of that",
+        v: gbp(r.totalRepaid) + " / " + gbp(o.upfrontPaid) + " / " + gbp(o.lump) }
     ];
 
     var groups = [];
@@ -1097,15 +1105,19 @@
 
     $("oppVerdict").innerHTML = o.years === 0
       ? "Nothing is ever deducted on this profile, so there is nothing to weigh against saving."
-      : (o.clearingIsBetter
-        ? "Clearing the balance today would cost <b>" + gbp(o.lump) + "</b> — and even after giving up " +
-          pct(o.savingsRate) + " a year on that money for " + o.years + " years, it comes out <b>" +
-          gbp(Math.abs(o.clearingSaves)) + "</b> ahead of repaying as required."
-        : "Clearing the balance today would cost <b>" + gbp(o.lump) + "</b> now. Keeping that money and " +
-          "letting it earn " + pct(o.savingsRate) + " while you repay as required leaves you <b>" +
-          gbp(Math.abs(o.clearingSaves)) + "</b> better off by " + (repaying.length ?
-          E.taxYearLabel(repaying[repaying.length - 1].taxYear + 1) : "the end") +
-          " — because deductions spread over decades are cheap money, and the write-off may cancel what is left.");
+      : (function () {
+          var cash = "In cash the loan looks like <b>" + gbp(r.totalRepaid) + "</b> against <b>" +
+            gbp(o.upfrontPaid) + "</b> to have paid the fees yourself. " +
+            "But those fees leave your hands during the course and the repayments trickle out over " +
+            r.yearsRepaying + " years, so the two are not the same money. ";
+          var priced = "Carried to " + endLabel + " at " + pct(o.savingsRate) + ", they come to <b>" +
+            gbp(o.fvRepayments) + "</b> and <b>" + gbp(o.fvUpfront) + "</b>";
+          var clear = o.lump > 0 ? ", against <b>" + gbp(o.fvLump) + "</b> to clear the balance today" : "";
+          var wins = o.cheapest
+            ? " — so the cheapest of them is to <b>" + o.cheapest.label + "</b>."
+            : ".";
+          return cash + priced + clear + wins;
+        })();
   }
 
   /* ---- the two choices, racing --------------------------------------------

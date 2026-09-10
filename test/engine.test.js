@@ -438,6 +438,49 @@ test("a higher savings rate gives up more", function () {
   ok(high.foregoneGrowth > low.foregoneGrowth * 2, "much more, in fact");
 });
 
+test("paying the fees in cash is carried to the same date as the repayments", function () {
+  var s = E.simulate({
+    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
+    salaries: { 2030: 45000 }
+  });
+  var o = s.opportunity;
+  near(o.upfrontPaid, s.combined.borrowed, 1, "the cash cost is what was drawn down");
+  ok(o.fvUpfront > o.upfrontPaid, "carried forward, it is worth more than its cash figure");
+  // Spent thirty years earlier, it compounds for longer than any repayment.
+  ok(o.fvUpfront / o.upfrontPaid > o.fvRepayments / o.paidOut,
+    "and it compounds harder than the repayment stream, being spent sooner");
+});
+
+test("with no savings rate the three choices are just their cash sums", function () {
+  var s = E.simulate({
+    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
+    salaries: { 2030: 45000 },
+    assumptions: { savings: 0 }
+  });
+  var o = s.opportunity;
+  near(o.fvUpfront, s.combined.borrowed, 1, "upfront is just what was borrowed");
+  near(o.fvRepayments, s.combined.totalRepaid, 1, "repayments are just the cash total");
+});
+
+test("an opening balance makes paying upfront and clearing today the same act", function () {
+  var o = E.simulate({
+    loans: [{ plan: "plan5", openingBalance: 60000, repaymentStartYear: 2030 }],
+    salaries: { 2030: 50000 }
+  }).opportunity;
+  near(o.upfrontPaid, o.lump, 0.01, "there are no fees to find, only a balance to clear");
+  near(o.fvUpfront, o.fvLump, 0.01, "so they carry forward identically");
+});
+
+test("the cheapest of the three is named, and is genuinely the smallest", function () {
+  var o = E.simulate({
+    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
+    salaries: { 2030: 45000 }
+  }).opportunity;
+  ok(o.cheapest, "one of them wins");
+  var all = [o.fvRepayments, o.fvUpfront, o.fvLump].filter(function (v) { return v > 0; });
+  near(o.cheapest.fv, Math.min.apply(null, all), 0.01, "and it is the smallest pile");
+});
+
 test("today's money is smaller than the cash figure, for both choices", function () {
   var o = withSalary(60000).opportunity;
   ok(o.realFvRepayments < o.fvRepayments, "repayments deflate");

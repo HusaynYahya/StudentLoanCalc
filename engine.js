@@ -572,6 +572,7 @@
       return { lump: r.balanceAtRepayStart || 0, years: 0, savingsRate: s,
                fvRepayments: 0, fvLump: r.balanceAtRepayStart || 0,
                paidOut: 0, foregoneGrowth: 0, realForegoneGrowth: 0,
+               upfrontPaid: 0, fvUpfront: 0, realFvUpfront: 0, cheapest: null,
                clearingSaves: -(r.balanceAtRepayStart || 0), clearingIsBetter: false,
                realFvRepayments: 0, realFvLump: r.balanceAtRepayStart || 0,
                realClearingSaves: -(r.balanceAtRepayStart || 0), track: [] };
@@ -598,15 +599,31 @@
       });
     });
 
-    var fvLump = lump * Math.pow(1 + s, span);
     var deflate = Math.pow(1 + infl, -span);
 
     // What the repayments would have earned on top of themselves had they gone
     // into a savings account instead: the pot, less what you actually put in.
     // This is the growth forfeited, not the money — that you were always going
     // to part with.
+    var fvLump = lump * Math.pow(1 + s, span);
     var paidOut = repaying.reduce(function (t, y) { return t + y.repaid + y.voluntary; }, 0);
     var foregoneGrowth = fvRepayments - paidOut;
+
+    // The third life: never borrow, and find the fees in cash while you study.
+    // That money leaves your hands decades before any repayment does, so to
+    // compare it fairly it has to be carried to the same date as the rest.
+    var upfrontPaid = 0, fvUpfront = 0;
+    r.years.forEach(function (y) {
+      if (!(y.borrowed > 0)) return;
+      upfrontPaid += y.borrowed;
+      fvUpfront += y.borrowed * Math.pow(1 + s, Math.max(0, endYear - y.taxYear - 0.5));
+    });
+    if (upfrontPaid <= 0) {
+      // No drawdowns to find — the scenario opened with a balance, so paying
+      // your own way and clearing it today are the same act.
+      upfrontPaid = lump;
+      fvUpfront = fvLump;
+    }
 
     return {
       lump: lump,
@@ -615,6 +632,19 @@
       fvRepayments: fvRepayments,
       fvLump: fvLump,
       paidOut: paidOut,
+      upfrontPaid: upfrontPaid,
+      fvUpfront: fvUpfront,
+      realFvUpfront: fvUpfront * deflate,
+      // Cheapest of the three, priced at the same date.
+      cheapest: (function () {
+        var opts = [
+          { key: "repay", label: "borrow and repay", fv: fvRepayments },
+          { key: "upfront", label: "pay the fees in cash", fv: fvUpfront },
+          { key: "clear", label: "clear the balance today", fv: fvLump }
+        ].filter(function (o) { return o.fv > 0; });
+        opts.sort(function (a, b) { return a.fv - b.fv; });
+        return opts.length ? opts[0] : null;
+      })(),
       foregoneGrowth: foregoneGrowth,
       realForegoneGrowth: foregoneGrowth * deflate,
       // Positive means clearing the balance today was the cheaper of the two.
