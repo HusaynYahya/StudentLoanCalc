@@ -1220,14 +1220,21 @@
         tone: "cool"
       },
       {
-        k: "Growth given up, in " + baseYear + " money",
+        k: "Growth given up, by " + endYearLabel,
+        v: gbp(o.foregoneGrowth),
+        sub: o.foregoneGrowth > 0
+          ? "saved at " + pct(o.savingsRate) + " instead, those repayments would have become " +
+            gbp(o.fvRepayments) + " by " + endYearLabel + " — this is the part you never earned"
+          : "nothing is deducted on this profile, so nothing is forfeited",
+        tone: "warm"
+      },
+      {
+        k: "…and in " + baseYear + " money",
         v: gbp(o.realForegoneGrowth),
         sub: o.foregoneGrowth > 0
-          ? "saved at " + pct(o.savingsRate) + " those repayments would have become " +
-            gbp(o.fvRepayments) + " by " + endYearLabel + " — " + gbp(o.foregoneGrowth) +
-            " more than you handed over, which is " + gbp(o.realForegoneGrowth) + " in " +
-            baseYear + " money"
-          : "nothing is deducted on this profile, so nothing is forfeited",
+          ? "the same forfeited growth, valued when the loan was taken out, at " +
+            pct(sim.assumptions.inflation) + " inflation"
+          : "nothing forfeited, in any money",
         tone: "warm"
       }
     ];
@@ -1588,81 +1595,106 @@
     return "Charged at " + range + ". " + why + capped;
   }
 
-  /* ---- the years, as a calendar ------------------------------------------ *
-   * A list of five dated sentences hides the shape of the thing: how long the
-   * quiet stretches are, how far apart the turning points sit, how much of a
-   * life this occupies. Laid out as years, that is the first thing you see.
+  /* ---- the years, on a line ---------------------------------------------- *
+   * A grid of boxes gave thirty cells to show six events and broke the axis
+   * every time it wrapped. One line, marked where something happens, and the
+   * gaps between the marks carry the meaning.
    * -------------------------------------------------------------------- */
 
   function renderMilestones(sim) {
     var r = sim.combined;
-    if (!r.years.length) { $("milestones").innerHTML = ""; return; }
+    var host = $("milestones");
+    if (!r.years.length) { host.innerHTML = ""; return; }
 
-    // One short caption per eventful year, keyed by the year it falls in.
-    var events = {};
+    var events = [];
     var note = function (taxYear, kind, text) {
       if (taxYear == null) return;
-      (events[taxYear] || (events[taxYear] = [])).push({ kind: kind, text: text });
+      var at = events.filter(function (e) { return e.year === taxYear; })[0];
+      if (at) { at.text += " · " + text; return; }
+      events.push({ year: taxYear, kind: kind, text: text });
     };
 
-    // A combined ledger carries no milestones of its own, so the turning
-    // points come from the undergraduate loan, which is the larger story.
+    // A combined ledger has no milestones of its own; the undergraduate loan
+    // is the larger story, so its turning points stand for both.
     var turns = (r.milestones && r.milestones.length)
       ? r.milestones : (sim.loans[0].milestones || []);
 
     turns.forEach(function (m) {
       if (!/^\d{4}/.test(m.year)) return;
       var y = Number(m.year.slice(0, 4));
-      if (m.kind === "peak") note(y, "peak", "balance peaks");
-      else if (m.kind === "turn") note(y, "turn", "repayments overtake interest");
-      else if (m.kind === "half") note(y, "half", "half of it repaid");
-      else if (sim.loans.length === 1 && m.kind === "cleared") note(y, "cleared", "cleared in full");
-      else if (sim.loans.length === 1 && m.kind === "written" + "Off") note(y, "written", "written off");
+      if (m.kind === "peak") note(y, "peak", "balance peaks at " + gbp(r.years.reduce(function (mx, yy) {
+        return Math.max(mx, yy.closingBalance); }, 0)));
+      else if (m.kind === "turn") note(y, "peak", "repayments overtake interest");
+      else if (m.kind === "half") note(y, "plain", "half of it repaid");
+      else if (sim.loans.length === 1 && m.kind === "cleared") note(y, "end", "cleared in full");
+      else if (sim.loans.length === 1 && m.kind === "writtenOff") note(y, "off", "written off");
     });
 
-    // With two loans each ending is its own event, and they rarely coincide.
     if (sim.loans.length > 1) {
       sim.loans.forEach(function (loan) {
         var lbl = loan.everRepaidInFull ? loan.clearedLabel : loan.writeOffLabel;
-        if (!lbl) return;
-        note(Number(lbl.slice(0, 4)),
-             loan.everRepaidInFull ? "cleared" : "written",
-             loan.planLabel + (loan.everRepaidInFull ? " cleared" : " written off"));
+        if (lbl) note(Number(lbl.slice(0, 4)), loan.everRepaidInFull ? "end" : "off",
+                      loan.planLabel + (loan.everRepaidInFull ? " cleared" : " written off"));
       });
     }
 
-    var firstRepay = (r.years.filter(function (y) { return y.phase === "repaying"; })[0] || {}).taxYear;
-    if (firstRepay != null) note(firstRepay, "start", "repayments begin");
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    if (repaying.length) note(repaying[0].taxYear, "plain", "repayments begin");
+    events.sort(function (a, b) { return a.year - b.year; });
 
-    var cells = r.years.map(function (y) {
-      var evs = events[y.taxYear] || [];
-      var kind = evs.length ? evs[0].kind : null;
-      var cls = "cal__yr" + (y.phase === "studying" ? " is-study" : " is-repay") +
-                (evs.length ? " is-event k-" + kind : "");
-      var title = evs.length
-        ? y.label + " — " + evs.map(function (e) { return e.text; }).join("; ")
-        : y.label + (y.phase === "studying" ? " — studying" : " — repaying " + gbp(y.repaid + y.voluntary));
-      return '<div class="' + cls + '" title="' + title + '">' +
-        "<b>" + y.taxYear + "</b>" +
-        (evs.length ? '<span>' + evs.map(function (e) { return e.text; }).join(" · ") + "</span>" : "") +
-        "</div>";
-    }).join("");
+    var from = r.years[0].taxYear, to = r.years[r.years.length - 1].taxYear;
+    var span = Math.max(1, to - from);
+    var W = 760, ml = 8, mr = 8, iw = W - ml - mr, axis = 34;
+    var x = function (y) { return ml + ((y - from) / span) * iw; };
 
-    var legend = [
-      { c: "is-study", t: "studying" },
-      { c: "is-repay", t: "repaying" },
-      { c: "k-peak", t: "the balance turns" },
-      { c: "k-cleared", t: "it ends" }
-    ].map(function (l) {
-      return '<i class="cal__key ' + l.c + '">' + l.t + "</i>";
-    }).join("");
+    // Study and repayment as two weights of the same line, not two colours
+    // fighting for attention.
+    var studyEnd = repaying.length ? repaying[0].taxYear : to;
+    var line =
+      '<line x1="' + x(from) + '" y1="' + axis + '" x2="' + x(studyEnd).toFixed(1) + '" y2="' + axis +
+        '" stroke="var(--info)" stroke-width="5" stroke-linecap="round"/>' +
+      '<line x1="' + x(studyEnd).toFixed(1) + '" y1="' + axis + '" x2="' + x(to) + '" y2="' + axis +
+        '" stroke="var(--bg-5)" stroke-width="5" stroke-linecap="round"/>';
 
-    $("milestones").innerHTML =
-      '<div class="cal">' + cells + "</div>" +
-      '<p class="cal__legend">' + legend + "</p>" +
-      '<p class="note">Each box is a tax year, from the first instalment to the last. Hover one for its figures.</p>';
+    var every = Math.max(1, Math.round(span / 8));
+    var ticks = "";
+    for (var ty = from; ty <= to; ty += every) {
+      ticks += '<text x="' + x(ty).toFixed(1) + '" y="' + (axis - 13) +
+        '" text-anchor="middle" font-size="10.5" fill="var(--ink-4)">' + ty + "</text>";
+    }
+    ticks += '<text x="' + x(to).toFixed(1) + '" y="' + (axis - 13) +
+      '" text-anchor="end" font-size="10.5" fill="var(--ink-4)">' + to + "</text>";
+
+    var colour = { peak: "var(--warn)", end: "var(--good)", off: "var(--bad)", plain: "var(--ink-2)" };
+    var rowEnds = [], marks = "";
+    events.forEach(function (e) {
+      var ex = x(e.year);
+      var label = e.year + " · " + e.text;
+      var width = label.length * 6.2 + 18;   // runs wide on purpose
+      var row = 0;
+      while (row < 5 && rowEnds[row] != null && rowEnds[row] > ex - 10) row++;
+      rowEnds[row] = ex + width;
+      var ey = axis + 24 + row * 19;
+      var c = colour[e.kind] || colour.plain;
+      var flip = ex + width > iw;               // near the end, label leftwards
+      marks +=
+        '<line x1="' + ex.toFixed(1) + '" y1="' + (axis + 4) + '" x2="' + ex.toFixed(1) + '" y2="' +
+          (ey - 5) + '" stroke="' + c + '" stroke-width="1" opacity=".45"/>' +
+        '<circle cx="' + ex.toFixed(1) + '" cy="' + axis + '" r="4.5" fill="' + c +
+          '" stroke="var(--bg-3)" stroke-width="2"/>' +
+        '<text x="' + (flip ? ex - 7 : ex + 7).toFixed(1) + '" y="' + ey + '" font-size="11" ' +
+          'text-anchor="' + (flip ? "end" : "start") + '" fill="' + c + '">' + label + "</text>";
+    });
+
+    var H = axis + 24 + (rowEnds.length || 1) * 19 + 8;
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="What happens to the loan, by year">' +
+      ticks + line + marks + "</svg>" +
+      '<p class="cal__legend"><i class="cal__key is-study">studying</i>' +
+      '<i class="cal__key is-repay">repaying</i>' +
+      '<i class="cal__key k-peak">the balance turns</i>' +
+      '<i class="cal__key k-cleared">it ends</i></p>';
   }
-
 
   /* ---- the log ---------------------------------------------------------- */
 

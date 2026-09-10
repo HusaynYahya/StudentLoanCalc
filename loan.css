@@ -572,7 +572,8 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   background: var(--line); border: 1px solid var(--line);
   border-radius: var(--r); overflow: hidden; position: relative;
 }
-@media (min-width: 780px) { .bigs { grid-template-columns: repeat(3, 1fr); } }
+@media (min-width: 700px) { .bigs { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1180px) { .bigs { grid-template-columns: repeat(4, 1fr); } }
 
 .big {
   background: var(--bg-3); padding: 1.15rem 1.25rem 1.2rem;
@@ -585,7 +586,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
   text-transform: uppercase; color: var(--ink-4); font-weight: 700;
 }
 .big__v {
-  margin: 0; font-family: var(--num); font-size: clamp(1.9rem, 3.6vw, 2.7rem);
+  margin: 0; font-family: var(--num); font-size: clamp(1.7rem, 2.9vw, 2.3rem);
   line-height: 1; letter-spacing: -.035em; font-variant-numeric: tabular-nums; color: var(--ink);
 }
 .big.cool .big__v { color: var(--info); }
