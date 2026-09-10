@@ -379,6 +379,7 @@
     renderHero(runs);
     renderAllCharts(runs);
     renderSensitivity(focus);
+    renderMilestones(focus);
     renderLog(focus);
     renderSummaries(focus);
     markScens();
@@ -629,284 +630,6 @@
     if (s.mode === "manual") return "typed by year";
     var c = CAREERS.filter(function (x) { return x.id === s.career; })[0];
     return c ? c.label : "Career";
-  }
-
-  /* ---- dragging the bands ------------------------------------------------ *
-   * The dates used to be five sliders stacked in the panel, which described a
-   * sequence without ever showing it. They are handles on the strip now: the
-   * thing you read is the thing you set.
-   * ---------------------------------------------------------------------- */
-
-  var tlDrag = null;
-
-  function timelineHandles(t, x, from, span, top, barH) {
-    var p = state.scen[state.active];
-    var hs = [
-      { id: "ugStart", year: t.ugStart, label: "Undergraduate starts", colour: "var(--info)" },
-      { id: "ugEnd",   year: t.ugEnds,  label: "…and ends",           colour: "var(--info)" }
-    ];
-    if (t.pg) {
-      hs.push({ id: "pgStart", year: t.pgStart, label: "Postgraduate starts", colour: "var(--sC)" });
-      hs.push({ id: "pgEnd",   year: t.pgEnds,  label: "…and ends",           colour: "var(--sC)" });
-    }
-    hs.push({ id: "workStart", year: t.workStart, label: "Work starts", colour: "var(--good)" });
-
-    return hs.map(function (hd) {
-      var hx = x(hd.year);
-      return '<g class="tl-handle" data-handle="' + hd.id + '" tabindex="0" role="slider" ' +
-        'aria-label="' + hd.label + '" aria-valuenow="' + hd.year + '">' +
-        '<rect x="' + (hx - 7).toFixed(1) + '" y="' + (top - 4) + '" width="14" height="' + (barH + 8) +
-          '" fill="transparent" style="cursor:ew-resize"/>' +
-        '<line x1="' + hx.toFixed(1) + '" y1="' + (top - 4) + '" x2="' + hx.toFixed(1) + '" y2="' +
-          (top + barH + 4) + '" stroke="' + hd.colour + '" stroke-width="2"/>' +
-        '<circle cx="' + hx.toFixed(1) + '" cy="' + (top + barH + 8) + '" r="4.5" fill="' + hd.colour +
-          '" stroke="var(--bg-3)" stroke-width="1.5"/>' +
-        "</g>";
-    }).join("");
-  }
-
-  // Where a pointer sits, in years.
-  function tlYearAt(ev, svg, from, span, W) {
-    var rect = svg.getBoundingClientRect();
-    var frac = (ev.clientX - rect.left) / rect.width;
-    return Math.round(from + frac * span);
-  }
-
-  function applyHandle(id, year) {
-    var t = timeline();
-    var set = function (el, v) { $(el).value = v; };
-
-    if (id === "ugStart") {
-      var len = t.ugYears;
-      set("startYear", clamp(year, 2000, 2050));
-      if (!state.pgTouched) set("pgStartYear", num("startYear", 2026) + len);
-    } else if (id === "ugEnd") {
-      set("courseYears", clamp(year - t.ugStart, 1, 8));
-    } else if (id === "pgStart") {
-      state.pgTouched = true;
-      set("pgStartYear", clamp(year, t.ugEnds, 2060));
-    } else if (id === "pgEnd") {
-      state.pgTouched = true;
-      set("pgYears", clamp(year - t.pgStart, 1, 6));
-    } else if (id === "workStart") {
-      state.workTouched = true;
-      set("workStartYear", clamp(year, t.ugStart, 2070));
-    }
-
-    if (id !== "workStart" && !state.workTouched) {
-      $("workStartYear").value = defaultWorkStart(timeline());
-    }
-    state.scen[state.active].manual = {};
-  }
-
-  function wireTimelineDrag() {
-    var host = $("timelineChart");
-    if (!host) return;
-
-    var pick = function (ev) {
-      var g = ev.target.closest("[data-handle]");
-      return g ? g.dataset.handle : null;
-    };
-
-    host.addEventListener("pointerdown", function (ev) {
-      var id = pick(ev);
-      if (!id) return;
-      ev.preventDefault();
-      tlDrag = { id: id, svg: host.querySelector("svg"),
-                 bounds: Object.assign({}, host.__tlBounds) };
-      host.setPointerCapture(ev.pointerId);
-    });
-
-    host.addEventListener("pointermove", function (ev) {
-      if (!tlDrag || !tlDrag.svg) return;
-      // Frozen at pointerdown: the axis is redrawn on every change, and
-      // reading the live one would move the ground under the pointer.
-      var b = tlDrag.bounds;
-      if (!b) return;
-      applyHandle(tlDrag.id, tlYearAt(ev, tlDrag.svg, b.from, b.span, b.W));
-      buildSalaryTable();
-      run();
-    });
-
-    var stop = function (ev) {
-      if (!tlDrag) return;
-      tlDrag = null;
-      try { host.releasePointerCapture(ev.pointerId); } catch (e) { /* already gone */ }
-    };
-    host.addEventListener("pointerup", stop);
-    host.addEventListener("pointercancel", stop);
-
-    // Arrow keys, for anyone not using a pointer.
-    host.addEventListener("keydown", function (ev) {
-      var id = pick(ev);
-      if (!id) return;
-      var step = ev.key === "ArrowLeft" ? -1 : ev.key === "ArrowRight" ? 1 : 0;
-      if (!step) return;
-      ev.preventDefault();
-      var now = Number(ev.target.closest("[data-handle]").getAttribute("aria-valuenow"));
-      applyHandle(id, now + step);
-      buildSalaryTable();
-      run();
-    });
-  }
-
-  /* ---- the whole life on one strip ---------------------------------------- *
-   * Study, the gap before work, the working years, any breaks, and the two
-   * dates the law fixes: when repayments fall due and when the balance is
-   * cancelled. Blocked out by year so the shape of a life is visible at a
-   * glance rather than assembled from six separate number boxes.
-   * ---------------------------------------------------------------------- */
-
-  var BAND = {
-    ug:    { fill: "var(--info)",  label: "Undergraduate" },
-    pg:    { fill: "var(--sC)",    label: "Postgraduate" },
-    gap:   { fill: "var(--ink-4)", label: "Neither studying nor working" },
-    work:  { fill: "var(--good)",  label: "Working" },
-    brk:   { fill: "var(--bad)",   label: "Break in employment" },
-    after: { fill: "var(--bg-5)",  label: "After the loan ends" }
-  };
-
-  function renderTimeline(sim) {
-    var host = $("timelineChart");
-    if (!host) return;
-    if (state.loanMode === "balance") {
-      host.innerHTML = "";
-      $("timelineKey").innerHTML = "";
-      $("timelineNote").textContent =
-        "The timeline needs a course to draw. Switch the loan to Course to set one out.";
-      return;
-    }
-
-    var t = timeline();
-    var p = state.scen[state.active];
-    var repayFrom = repayStartYear();
-    var wall = repayFrom + E.RULES[p.plan].writeOffYears;
-    var cleared = sim.combined.everRepaidInFull && sim.combined.clearedLabel
-      ? Number(sim.combined.clearedLabel.slice(0, 4)) + 1 : null;
-    var stop = cleared || wall;
-
-    var from = t.ugStart, to = Math.max(stop, t.workStart + 1);
-    var span = Math.max(1, to - from);
-
-    // One classification per year, so overlapping rules resolve once here
-    // rather than three times in the drawing.
-    var kindOf = function (y) {
-      if (y >= t.ugStart && y < t.ugEnds) return "ug";
-      if (t.pg && y >= t.pgStart && y < t.pgEnds) return "pg";
-      if (y >= stop) return "after";
-      if (y < t.workStart) return "gap";
-      if (inBreak(p, y)) return "brk";
-      return "work";
-    };
-
-    // Short forms of the milestones, placed on the strip rather than listed
-    // beside it. The ending is already flagged above the bar, so it is not
-    // repeated below.
-    var events = (sim.combined.milestones || []).filter(function (m) {
-      return m.kind !== "cleared" && m.kind !== "writtenOff" && m.kind !== "never" && /^\d{4}/.test(m.year);
-    }).map(function (m) {
-      return {
-        year: Number(m.year.slice(0, 4)),
-        label: m.kind === "peak" ? "balance peaks"
-             : m.kind === "turn" ? "repayments overtake interest"
-             : m.kind === "half" ? "half of it repaid"
-             : m.text.slice(0, 34),
-        kind: m.kind
-      };
-    }).sort(function (a, b) { return a.year - b.year; });
-
-    var rowsNeeded = Math.min(3, Math.max(1, events.length));
-    var W = 760, iw = W, top = 34, barH = 34;
-    var eventTop = top + barH + 26;
-    var H = eventTop + rowsNeeded * 20 + 12;
-    var x = function (y) { return ((y - from) / span) * iw; };
-
-    var blocks = "", runStart = from, runKind = kindOf(from);
-    var flush = function (endYear) {
-      var w = x(endYear) - x(runStart);
-      if (w <= 0) return;
-      var b = BAND[runKind];
-      blocks += '<rect x="' + x(runStart).toFixed(1) + '" y="' + top + '" width="' + w.toFixed(1) +
-        '" height="' + barH + '" fill="' + b.fill + '" opacity="' + (runKind === "after" ? ".5" : ".85") + '"/>';
-      // Name the block inside it when there is room.
-      if (w > 62) {
-        blocks += '<text x="' + (x(runStart) + w / 2).toFixed(1) + '" y="' + (top + barH / 2 + 4) +
-          '" text-anchor="middle" font-size="10.5" font-weight="700" fill="' +
-          (runKind === "after" ? "var(--ink-3)" : "#0b0e13") + '">' +
-          (runKind === "ug" ? "UNDERGRAD" : runKind === "pg" ? "POSTGRAD" :
-           runKind === "brk" ? "BREAK" : runKind === "gap" ? "GAP" :
-           runKind === "work" ? "WORKING" : "LOAN GONE") + "</text>";
-      }
-    };
-    for (var y = from + 1; y <= to; y++) {
-      var k = y < to ? kindOf(y) : null;
-      if (k !== runKind) { flush(y); runStart = y; runKind = k; }
-    }
-
-    // The years along the bottom, thinned so they never collide.
-    var every = Math.max(1, Math.ceil(span / 14));
-    var ticks = "";
-    for (var ty = from; ty <= to; ty += every) {
-      ticks += '<line x1="' + x(ty).toFixed(1) + '" y1="' + (top + barH) + '" x2="' + x(ty).toFixed(1) +
-        '" y2="' + (top + barH + 4) + '" stroke="var(--line-2)" stroke-width="1"/>' +
-        '<text x="' + x(ty).toFixed(1) + '" y="' + (top + barH + 16) +
-        '" text-anchor="middle" font-size="10.5" fill="var(--ink-4)">' + ty + "</text>";
-    }
-
-    // The two dates the law fixes, marked above the strip.
-    var flag = function (year, text, colour) {
-      if (year < from || year > to) return "";
-      var fx = x(year);
-      var atEnd = fx > iw - 90, atStart = fx < 90;
-      var anchor = atEnd ? "end" : (atStart ? "start" : "middle");
-      // Keep the caption off the very edge, where it would be clipped.
-      var tx = atEnd ? Math.min(fx, iw - 2) : (atStart ? Math.max(fx, 2) : fx);
-      return '<line x1="' + fx.toFixed(1) + '" y1="' + (top - 14) + '" x2="' + fx.toFixed(1) +
-        '" y2="' + (top + barH) + '" stroke="' + colour + '" stroke-width="1.5" stroke-dasharray="3 3"/>' +
-        '<text x="' + tx.toFixed(1) + '" y="' + (top - 19) + '" text-anchor="' + anchor +
-        '" font-size="10.5" font-weight="700" fill="' + colour + '">' + text + "</text>";
-    };
-
-    var rowEnds = [], marks = "";
-    events.forEach(function (ev) {
-      var ex = x(ev.year);
-      var width = ev.label.length * 5.6 + 12;
-      var row = 0;
-      while (row < rowsNeeded - 1 && rowEnds[row] != null && rowEnds[row] > ex - 6) row++;
-      rowEnds[row] = ex + width;
-      var ey = eventTop + row * 20;
-      var colour = ev.kind === "peak" || ev.kind === "turn" ? "var(--warn)" : "var(--ink-3)";
-      marks +=
-        '<line x1="' + ex.toFixed(1) + '" y1="' + (top + barH) + '" x2="' + ex.toFixed(1) +
-          '" y2="' + (ey - 4) + '" stroke="' + colour + '" stroke-width="1" opacity=".5"/>' +
-        '<circle cx="' + ex.toFixed(1) + '" cy="' + (ey - 4) + '" r="2.5" fill="' + colour + '"/>' +
-        '<text x="' + (ex + 6).toFixed(1) + '" y="' + ey + '" font-size="10.5" fill="' + colour + '">' +
-          ev.year + " \u00b7 " + ev.label + "</text>";
-    });
-
-    host.__tlBounds = { from: from, span: span, W: W };
-
-    host.innerHTML =
-      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="The course, the working years, the loan and what happens to it, by year">' +
-      blocks + ticks + marks + timelineHandles(t, x, from, span, top, barH) +
-      flag(repayFrom, "repayments due", "var(--warn)") +
-      flag(stop, cleared ? "cleared" : "written off", cleared ? "var(--good)" : "var(--bad)") +
-      "</svg>";
-
-    var used = {};
-    for (var uy = from; uy < to; uy++) used[kindOf(uy)] = true;
-    $("timelineKey").innerHTML = Object.keys(BAND).filter(function (k) { return used[k]; })
-      .map(function (k) { return '<i style="color:' + BAND[k].fill + '">' + BAND[k].label + "</i>"; }).join("");
-
-    var brk = breaksOf(p);
-    $("timelineNote").innerHTML =
-      "Studying " + t.ugStart + "\u2013" + t.ugEnds +
-      (t.pg ? ", then again " + t.pgStart + "\u2013" + t.pgEnds : "") +
-      ". Working from <b>" + t.workStart + "</b>" +
-      (brk.length ? ", with " + brk.length + (brk.length === 1 ? " break" : " breaks") : "") +
-      ". Repayments fall due from April <b>" + repayFrom + "</b>" +
-      (cleared ? " and the loan clears in <b>" + sim.combined.clearedLabel + "</b>."
-               : " and whatever is left is written off in <b>" + sim.combined.writeOffLabel + "</b>.");
   }
 
   /* ---- how much of the answer is the guess? ------------------------------ *
@@ -1868,7 +1591,6 @@
 
   function renderAllCharts(runs) {
     renderBigs(runs);
-    renderTimeline(runs.filter(function (s) { return s.index === state.active; })[0] || runs[0]);
     renderFacts(runs);
     renderChart(runs);
     renderSalaryChart(runs);
@@ -2275,6 +1997,57 @@
   /* ---- course length, as chips ------------------------------------------ */
 
 
+  function buildLengthChips() {
+    var host = $("lenChips");
+    host.innerHTML = [2, 3, 4, 5, 6].map(function (n) {
+      return '<button type="button" class="chip" role="radio" aria-checked="false" data-years="' + n + '">' +
+        n + "</button>";
+    }).join("");
+    host.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".chip");
+      if (!b) return;
+      $("courseYears").value = b.dataset.years;
+      followTimeline("courseYears");
+      markLength();
+      state.scen[state.active].manual = {};
+      buildSalaryTable();
+      run();
+    });
+  }
+
+  function buildPgLengthChips() {
+    var host = $("pgLenChips");
+    if (!host) return;
+    host.innerHTML = [1, 2, 3, 4].map(function (n) {
+      return '<button type="button" class="chip" role="radio" aria-checked="false" data-pgyears="' + n + '">' + n + "</button>";
+    }).join("");
+    host.addEventListener("click", function (ev) {
+      var b = ev.target.closest(".chip");
+      if (!b) return;
+      $("pgYears").value = b.dataset.pgyears;
+      followTimeline("pgYears");
+      markLength();
+      run();
+    });
+  }
+
+  function markLength() {
+    var n = String(Math.round(num("courseYears", 3)));
+    Array.prototype.forEach.call($("lenChips").children, function (b) {
+      var on = b.dataset.years === n;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    var pn = String(Math.round(num("pgYears", 1)));
+    if ($("pgLenChips")) {
+      Array.prototype.forEach.call($("pgLenChips").children, function (b) {
+        var on = b.dataset.pgyears === pn;
+        b.classList.toggle("is-on", on);
+        b.setAttribute("aria-checked", on ? "true" : "false");
+      });
+    }
+  }
+
   /* ---------------------------------------------------------------------- *
    * SETUP
    * -------------------------------------------------------------------- */
@@ -2523,6 +2296,8 @@
     fillSelects();
     fillRulesTable();
     buildCareerCards();
+    buildLengthChips();
+    buildPgLengthChips();
     buildScenTabs();
     state.scen = [0,1,2,3,4].map(blankScenario);
     var restored = restore();
@@ -2542,11 +2317,11 @@
     fitSliders();
     markScens();
     markCareer();
+    markLength();
     if (!state.workTouched) $("workStartYear").value = defaultWorkStart(timeline());
     if (!state.pgTouched) $("pgStartYear").value = timeline().ugEnds;
     syncSliders();
     wire();
-    wireTimelineDrag();
     run();
   }
 
