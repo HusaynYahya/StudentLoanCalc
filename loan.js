@@ -562,7 +562,7 @@
    * -------------------------------------------------------------------- */
 
   var DRAW_YEARS = 40;
-  var DRAW_MAX = 150000;          // top of the axis; typing elsewhere goes higher
+  var DRAW_MAX = 250000;          // top of the axis; typing elsewhere goes higher
 
   // Nothing. The chart opens blank and the curve is yours from the first
   // click, rather than five borrowed points to be dragged out of the way.
@@ -610,7 +610,7 @@
     var p = state.scen[state.active];
     var pts = pointsOf(p);
 
-    var grid = "", step = 25000;
+    var grid = "", step = DRAW_MAX > 160000 ? 50000 : 25000;
     for (var v = 0; v <= DRAW_MAX; v += step) {
       grid += '<line x1="' + DRAW.ml + '" y1="' + drawY(v).toFixed(1) + '" x2="' + (DRAW.W - DRAW.mr) +
         '" y2="' + drawY(v).toFixed(1) + '" stroke="var(--line)" stroke-width="1"/>' +
@@ -950,7 +950,7 @@
         '<p class="hcell__fig">' + gbp(up) + "</p>" +
         '<p class="hcell__sub">' + (state.loanMode === "balance"
           ? "clearing the whole balance, in cash, today"
-          : "the fees and living costs, found in cash") + "</p></div>");
+          : "upfront costs of tuition fees") + "</p></div>");
     }
 
     $("heroRow").innerHTML = cells.join("");
@@ -2134,12 +2134,6 @@
     var start = repayStartYear();
 
     if (state.loanMode === "course") {
-      var yrs = Math.round(num("courseYears", 3));
-      var perYear = num("tuition", 0) + num("maintenance", 0);
-      $("borrowSummary").innerHTML =
-        "Borrowing <b>" + gbp(perYear) + "</b> a year for <b>" + yrs + " years</b> — <b>" +
-        gbp(perYear * yrs) + "</b> in all. With interest running from the first instalment, you owe <b>" +
-        gbp(sim.combined.balanceAtRepayStart) + "</b> when repayments begin in April " + start + ".";
       var t = timeline();
       var bits = ["Undergraduate " + t.ugStart + "\u2013" + t.ugEnds];
       if (t.pg) bits.push("postgraduate " + t.pgStart + "\u2013" + t.pgEnds);
