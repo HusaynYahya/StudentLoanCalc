@@ -45,7 +45,7 @@
       rate: 0.09,
       threshold: 29385,
       thresholdFrozenUntil: 2030, // frozen April 2027 → April 2030
-      upperThreshold: 49130,      // top of the interest sliding scale
+      upperThreshold: 52885,      // top of the interest sliding scale, 6 Apr 2026
       writeOffYears: 30,
       writeOffNote: "30 years after the April you were first due to repay.",
       interest: "slidingScale",

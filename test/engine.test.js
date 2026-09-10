@@ -29,6 +29,10 @@ var A = E.DEFAULT_ASSUMPTIONS;
 
 console.log("\nThresholds (2026/27 figures, uprated thereafter)");
 
+test("the Plan 2 upper interest threshold is the published one", function () {
+  eq(E.RULES.plan2.upperThreshold, 52885, "£52,885 from 6 April 2026");
+});
+
 test("2026/27 thresholds match the published figures", function () {
   eq(E.thresholdFor("plan1", 2026, A), 26900, "plan 1");
   eq(E.thresholdFor("plan2", 2026, A), 29385, "plan 2");
@@ -144,13 +148,13 @@ test("Plan 2 slides from RPI to RPI + 3% across the income band", function () {
   var a = Object.assign({}, A, { rpi: 0.041, interestCap: null });
   var at = function (income) {
     return E.interestRate("slidingScale", {
-      assumptions: a, income: income, threshold: 29385, upperThreshold: 49130, taxYear: 2029
+      assumptions: a, income: income, threshold: 29385, upperThreshold: 52885, taxYear: 2029
     });
   };
   near(at(20000), 0.041, 1e-9, "below the threshold — RPI only");
   near(at(29385), 0.041, 1e-9, "at the threshold");
-  near(at(39257.5), 0.041 + 0.015, 1e-6, "halfway — RPI + 1.5%");
-  near(at(49130), 0.071, 1e-9, "at the top of the band");
+  near(at((29385 + 52885) / 2), 0.041 + 0.015, 1e-6, "halfway — RPI + 1.5%");
+  near(at(52885), 0.071, 1e-9, "at the top of the band");
   near(at(90000), 0.071, 1e-9, "above the band — no more than RPI + 3%");
 });
 
