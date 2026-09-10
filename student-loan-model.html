@@ -3935,12 +3935,10 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
     });
 
     // Which alternatives exist depends on where you are standing. Before the
-    // course, the choice is whether to borrow at all; once you owe something,
-    // the fees are long spent and the only question left is whether to clear
-    // it. Offering both at once produced two rows a hair apart — the study
-    // interest, near enough cancelled by discounting it — which read as the
-    // same thing said twice, and fairly so.
+    // course there are three: never borrow, borrow and let it run, or borrow
+    // and settle it the day it falls due.
     var atStart = state.loanMode !== "balance";
+    var studyInterest = Math.max(0, o.lump - r.borrowed);
 
     var choices = (atStart
       ? [
@@ -3953,7 +3951,12 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
                 (yrs.length === 1 ? " year" : " years") + ", " +
                 (yrs.length ? yrs[0].label : "") + " to " +
                 (yrs.length ? yrs[yrs.length - 1].label : "");
-            })() }
+            })() },
+          { key: "clear",   k: "Borrow, then clear it in one payment", cash: o.lump, fv: o.pvLump,
+            why: "one payment in " + E.taxYearLabel(repayStartYear()) +
+                 ", the April repayments would have begun — " + gbp(r.borrowed) +
+                 " borrowed plus " + gbp(studyInterest) +
+                 " of interest run up during the course" }
         ]
       : [
           { key: "repay",   k: "Keep repaying as required", cash: r.totalRepaid, fv: o.pvRepayments,
@@ -3972,8 +3975,8 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
       '<div class="fgroup fgroup--wide"><h4>Which is actually cheapest?</h4>' +
       '<p class="fgroup__lede">Money paid sooner costs you more than the same money paid later, because ' +
       'what you keep can earn ' + pct(o.savingsRate) + ' in the meantime. Each option is therefore ' +
-      'discounted back to <b>' + baseLabel + "</b>, so all three are stated in money you can picture " +
-      "rather than in three different decades.</p>" +
+      'discounted back to <b>' + baseLabel + "</b>, so they are stated in money you can picture " +
+      "rather than in money of three different decades.</p>" +
       '<div class="scroll"><table class="choices"><thead><tr><th scope="col">Option</th>' +
       '<th scope="col" class="n">You pay</th>' +
       '<th scope="col" class="n">Cost in ' + baseLabel + " money</th>" +
@@ -3987,12 +3990,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
           '<td class="n lead">' + gbp(c.fv) + "</td>" +
           '<td class="n gap">' + (i === 0 ? "cheapest" : "+" + gbp(gap)) + "</td></tr>";
       }).join("") +
-      "</tbody></table></div>" +
-      '<p class="choices__now">' + (atStart
-        ? "Clearing the whole balance takes <b>" + gbp(o.lump) + "</b> \u2014 what will be owed by " +
-          E.taxYearLabel(repayStartYear()) + ", once the last instalment is drawn and the interest " +
-          "accrued through the course has run. On <b>" + gbp(r.borrowed) + "</b> borrowed."
-        : "Clearing the whole balance right now takes <b>" + gbp(o.lump) + "</b>.") + "</p></div>";
+      "</tbody></table></div></div>";
 
     $("focusGrid").innerHTML = groups.map(function (g) {
       return '<div class="fgroup"><h4>' + g.name + "</h4><dl>" + g.rows.filter(function (row) {
