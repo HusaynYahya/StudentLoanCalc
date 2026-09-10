@@ -26,10 +26,18 @@
 
     <form id="form" novalidate>
 
+      <!-- ---- scenarios ---- -->
+      <section class="grp grp--scen">
+        <div class="grp__head"><h2>Compare</h2></div>
+        <div class="scens" id="scenTabs" role="tablist" aria-label="Scenarios"></div>
+        <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">No loan at all</span></label>
+        <p class="note">Everything below edits the scenario you have selected. All of them stay on the charts.</p>
+      </section>
+
       <!-- ---- path ---- -->
       <section class="grp">
         <div class="grp__head">
-          <h2>Your path</h2>
+          <h2>Income <b class="who" id="whoIncome">A</b></h2>
           <div class="seg" role="tablist" aria-label="How to set the salary">
             <button type="button" role="tab" id="tab-predict" aria-controls="pane-predict" aria-selected="true" data-tab="predict">Career</button>
             <button type="button" role="tab" id="tab-manual" aria-controls="pane-manual" aria-selected="false" data-tab="manual">By year</button>
@@ -74,7 +82,7 @@
       <!-- ---- loan ---- -->
       <section class="grp">
         <div class="grp__head">
-          <h2>The loan</h2>
+          <h2>Plan <b class="who" id="whoPlan">A</b></h2>
           <div class="seg" role="tablist" aria-label="How to describe the loan">
             <button type="button" role="tab" id="tab-course" aria-controls="pane-course" aria-selected="true" data-tab="course">Course</button>
             <button type="button" role="tab" id="tab-balance" aria-controls="pane-balance" aria-selected="false" data-tab="balance">Balance</button>
@@ -212,11 +220,10 @@
 
     <header class="hero" aria-live="polite">
       <div class="hero__lead">
-        <p class="hero__label" id="heroLabel">You hand over</p>
-        <p class="hero__fig" id="heroFig">£0</p>
-        <p class="hero__sub" id="heroSub"></p>
+        <p class="hero__label">Handed over, over a lifetime</p>
+        <div class="hero__row" id="heroRow"></div>
       </div>
-      <dl class="hero__stats" id="heroStats"></dl>
+      <p class="hero__gap" id="heroGap"></p>
     </header>
 
     <div class="bar">
@@ -258,9 +265,23 @@
 
       <figure class="card">
         <figcaption><h3>Where it ends up</h3>
-          <p>Both bars are the same length. The money has to go somewhere.</p></figcaption>
+          <p>For the selected scenario. Both bars are the same length — the money has to go somewhere.</p></figcaption>
         <div id="flowChart" class="viz"></div>
         <p class="key" id="flowKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>The running cost of having a loan</h3>
+          <p>Everything handed over, accumulating. The flat line along the bottom is the life where you never borrowed.</p></figcaption>
+        <div id="costChart" class="viz"></div>
+        <p class="key" id="costKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>Side by side</h3>
+          <p>What each scenario costs over a lifetime, against never having borrowed.</p></figcaption>
+        <div id="barsChart" class="viz"></div>
+        <p class="key" id="barsKey"></p>
       </figure>
 
       <figure class="card card--wide">
@@ -278,7 +299,7 @@
 
     <section class="card card--flat" aria-labelledby="h-log">
       <div class="card__bar">
-        <h3 id="h-log">The log</h3>
+        <h3 id="h-log">The log <b class="who" id="whoLog">A</b></h3>
         <div class="btnrow">
           <button type="button" class="btn" id="toggleZeros">Hide empty years</button>
           <button type="button" class="btn" id="downloadCsv">CSV</button>

@@ -17,6 +17,24 @@ Open `index.html`. No build step, no framework, no network requests.
 `engine.js` is pure — circumstances in, ledger out, no DOM — and loads under
 both `<script>` and `require()`, which is how the tests run it.
 
+## Comparison is the point
+
+The dashboard runs up to **three scenarios at once**, plus the life where you
+never borrowed at all, and overlays them on every chart. Each scenario carries
+its own career, starting salary, pay rise, repayment plan and voluntary
+overpayment; the course, the assumptions and the write-off rules are shared,
+so you are comparing lives rather than comparing settings.
+
+Only one set of income controls exists in the page. The scenario tabs load a
+run into it and edits are written back, so every input keeps a stable id — and
+the panel tints to whichever scenario you are editing, so it is never ambiguous
+which line on the chart a slider is moving.
+
+The headline is the comparison itself: what each life hands over, side by side,
+with the spread between the cheapest and dearest spelled out underneath. The
+"no loan" column is always £0, which is the honest baseline — the whole of what
+you hand over is what having borrowed costs you.
+
 ## The interface
 
 A split-screen instrument, dark and numbers-first. Controls are pinned in a
@@ -36,7 +54,7 @@ arts, low-earning, and "set it myself". Each is a curve of anchor salaries in
 geometrically, with inflation added when it becomes cash. Illustrative starting
 points, not forecasts — they exist to be edited.
 
-## The five charts
+## The charts
 
 | | What it shows |
 | --- | --- |
@@ -45,6 +63,8 @@ points, not forecasts — they exist to be edited.
 | **What leaves your pay** | The monthly deduction over time — the figure you would notice on a payslip |
 | **The interest rate** | A step line per loan against RPI, so Plan 2's slide with income and the cap lapsing are both visible |
 | **Where it ends up** | Two bars of identical length, because they are the same money from each end: borrowed + interest = repaid + written off, exactly |
+| **The running cost of a loan** | Everything handed over, accumulating, one line per scenario — with the flat line along the bottom being the life where you never borrowed |
+| **Side by side** | Lifetime cost per scenario as bars, against never having borrowed |
 
 A cash / today's-money toggle redraws all of them. Below the charts sit the
 sensitivity panel, the milestones, the year-by-year log and the rules.

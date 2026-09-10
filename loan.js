@@ -112,6 +112,9 @@
    * -------------------------------------------------------------------- */
 
   var state = {
+    scen: [],                // the three comparable runs
+    active: 0,               // which one the controls are editing
+    showNoLoan: true,        // the life where you never borrowed
     loanMode: "course",      // "course" | "balance"
     incomeMode: "predict",   // "predict" | "manual"
     basis: "cash",           // "cash" | "real"
@@ -122,6 +125,7 @@
   };
 
   var lastSim = null;
+  var lastRuns = null;
 
   /* ---------------------------------------------------------------------- *
    * READING THE FORM
@@ -246,68 +250,224 @@
    * -------------------------------------------------------------------- */
 
   function run() {
-    var sc;
-    try { sc = scenario(); } catch (e) { return; }
-    var sim = E.simulate(sc);
-    lastSim = sim;
+    captureScenario();
 
-    renderHero(sim);
-    renderSensitivity(sim);
-    renderAllCharts(sim);
-    renderMilestones(sim);
-    renderLog(sim);
-    renderSummaries(sim);
+    var runs;
+    try { runs = runAll(); } catch (e) { return; }
+    if (!runs.length) return;
+
+    lastRuns = runs;
+    var focus = runs.filter(function (s) { return s.index === state.active; })[0] || runs[0];
+    lastSim = focus;
+
+    renderHero(runs);
+    renderAllCharts(runs);
+    renderSensitivity(focus);
+    renderMilestones(focus);
+    renderLog(focus);
+    renderSummaries(focus);
+    markScens();
     save();
   }
 
-  function renderHero(sim) {
-    var r = sim.combined;
-    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
-    // The first year you are *due* to repay is not the first year anything is
-    // actually taken — below the threshold, that can be years later, or never.
-    var first = repaying.filter(function (y) { return y.monthlyRepayment > 0; })[0];
-    var opens = repaying[0];
-    var peak = repaying.reduce(function (m, y) { return y.monthlyRepayment > m ? y.monthlyRepayment : m; }, 0);
-    var done = r.everRepaidInFull;
+  /* ---------------------------------------------------------------------- *
+   * SCENARIOS
+   *
+   * Up to three runs on the chart at once, plus the life where you never
+   * borrowed at all. Only one set of income controls exists in the DOM; the
+   * tabs load a scenario into it and edits are written back, so every input
+   * keeps a stable id and the slider and persistence machinery is untouched.
+   * -------------------------------------------------------------------- */
 
-    var cadence = !first
-      ? "nothing is ever deducted"
-      : (opens && first !== opens
-          ? "nothing due until " + first.label + ", then " + gbp(first.monthlyRepayment) +
-            " a month, peaking at " + gbp(peak)
-          : gbp(first.monthlyRepayment) + " a month at first, peaking at " + gbp(peak));
+  var SCEN_META = [
+    { id: "A", colour: "var(--sA)" },
+    { id: "B", colour: "var(--sB)" },
+    { id: "C", colour: "var(--sC)" }
+  ];
 
-    if (r.borrowed <= 0) {
-      $("heroLabel").textContent = "Nothing borrowed";
-      $("heroFig").textContent = "\u00a30";
-      $("heroSub").textContent = "Set a tuition fee, a maintenance loan or an opening balance.";
-      $("heroStats").innerHTML = "";
-      return;
-    }
-
-    $("heroLabel").textContent = "You hand over";
-    $("heroFig").textContent = gbp(r.totalRepaid);
-    $("heroSub").innerHTML = done
-      ? '<b class="good">Cleared in ' + r.clearedLabel + "</b> after " + r.yearsRepaying +
-        " years \u00b7 " + cadence
-      : '<b class="bad">' + gbp(r.writtenOff) + " written off in " + r.writeOffLabel +
-        "</b> \u00b7 " + cadence;
-
-    var stats = [
-      { k: "Borrowed", v: gbp(r.borrowed) },
-      { k: "Owed day one", v: gbp(r.balanceAtRepayStart) },
-      { k: "Interest", v: gbp(r.totalInterest), c: "warn" },
-      { k: "Today's money", v: gbp(r.totalRealRepaid) },
-      done ? { k: "Written off", v: "\u2014", c: "good" }
-           : { k: "Written off", v: gbp(r.writtenOff), c: "bad" },
-      { k: "Per \u00a31", v: "\u00a3" + r.perPoundBorrowed.toFixed(2) }
-    ];
-    $("heroStats").innerHTML = stats.map(function (s) {
-      return "<div><dt>" + s.k + '</dt><dd class="' + (s.c || "") + '">' + s.v + "</dd></div>";
-    }).join("");
+  function blankScenario(i) {
+    return {
+      on: i < 2,                       // A and B on to begin with — it is a comparison
+      career: i === 0 ? "grad" : (i === 1 ? "tech" : "creative"),
+      startSalary: 30000,
+      growth: 4,
+      plan: "plan5",
+      overpay: 0
+    };
   }
 
-  /* ---- how much of the answer is the guess? ----------------------------- */
+  // Move the active scenario's settings into the shared controls.
+  function loadScenario() {
+    var s = state.scen[state.active];
+    $("career").value = s.career;
+    $("startSalary").value = s.startSalary;
+    $("salaryGrowth").value = s.growth;
+    $("plan").value = s.plan;
+    $("overpay").value = s.overpay;
+    syncSliders();
+    markCareer();
+    var tag = SCEN_META[state.active].id;
+    // Tint the whole panel to the scenario being edited, so it is never
+    // ambiguous which of the lines on the chart a slider is moving.
+    var panel = document.querySelector(".panel");
+    if (panel) {
+      panel.style.setProperty("--live", "var(--s" + tag + ")");
+      panel.style.setProperty("--live-g", "var(--s" + tag + "-g)");
+    }
+    ["whoIncome", "whoPlan", "whoLog"].forEach(function (id) {
+      var el = $(id);
+      if (el) { el.textContent = tag; el.style.color = SCEN_META[state.active].colour; }
+    });
+    $("planBlurb").textContent = E.RULES[s.plan].blurb;
+  }
+
+  // And back the other way, after any edit.
+  function captureScenario() {
+    var s = state.scen[state.active];
+    s.career = $("career").value;
+    s.startSalary = num("startSalary", 30000);
+    s.growth = num("salaryGrowth", 4);
+    s.plan = $("plan").value;
+    s.overpay = num("overpay", 0);
+  }
+
+  function syncSliders() {
+    var boxes = document.querySelectorAll("input[data-slider]");
+    Array.prototype.forEach.call(boxes, function (box) {
+      var ctl = box.closest(".ctl");
+      var range = ctl && ctl.querySelector('input[type="range"]');
+      if (!range) return;
+      var v = parseFloat(box.value);
+      if (isFinite(v)) range.value = clamp(v, parseFloat(range.min), parseFloat(range.max));
+    });
+  }
+
+  function buildScenTabs() {
+    var host = $("scenTabs");
+    host.innerHTML = SCEN_META.map(function (m, i) {
+      return '<div class="scen" data-scen="' + i + '">' +
+        '<button type="button" class="scen__pick" role="tab" aria-selected="false" data-pick="' + i + '">' +
+          '<span class="scen__dot" style="background:' + m.colour + '"></span>' +
+          '<span class="scen__id">' + m.id + '</span>' +
+          '<span class="scen__name" data-name="' + i + '">—</span>' +
+        "</button>" +
+        '<button type="button" class="scen__on" data-toggle="' + i + '" aria-pressed="false" title="Show or hide on the charts">' +
+          '<span aria-hidden="true"></span><span class="sr-only">Show scenario ' + m.id + '</span></button>' +
+        "</div>";
+    }).join("");
+
+    host.addEventListener("click", function (ev) {
+      var pick = ev.target.closest("[data-pick]");
+      var tog = ev.target.closest("[data-toggle]");
+      if (tog) {
+        var j = Number(tog.dataset.toggle);
+        var lit = state.scen.filter(function (s) { return s.on; }).length;
+        if (state.scen[j].on && lit <= 1) return;      // never leave the charts empty
+        state.scen[j].on = !state.scen[j].on;
+        if (state.scen[j].on) { state.active = j; loadScenario(); }
+        markScens(); run();
+        return;
+      }
+      if (pick) {
+        var i = Number(pick.dataset.pick);
+        state.active = i;
+        if (!state.scen[i].on) state.scen[i].on = true;
+        loadScenario(); markScens(); run();
+      }
+    });
+  }
+
+  function markScens() {
+    Array.prototype.forEach.call($("scenTabs").children, function (el, i) {
+      var s = state.scen[i];
+      el.classList.toggle("is-active", i === state.active);
+      el.classList.toggle("is-off", !s.on);
+      el.querySelector(".scen__pick").setAttribute("aria-selected", i === state.active ? "true" : "false");
+      el.querySelector(".scen__on").setAttribute("aria-pressed", s.on ? "true" : "false");
+      var career = CAREERS.filter(function (c) { return c.id === s.career; })[0];
+      el.querySelector("[data-name]").textContent =
+        (career && career.id !== "custom" ? career.label : gbpShort(s.startSalary)) +
+        (s.plan !== "plan5" ? " · " + E.RULES[s.plan].label : "") +
+        (s.overpay > 0 ? " · +" + gbpShort(s.overpay) + "/m" : "");
+    });
+  }
+
+  /* ---- running every live scenario -------------------------------------- */
+
+  function runAll() {
+    var out = [];
+    var keep = state.active;
+    state.scen.forEach(function (s, i) {
+      if (!s.on) return;
+      state.active = i;                       // scenario() reads the shared controls…
+      var saved = { career: $("career").value, startSalary: $("startSalary").value,
+                    growth: $("salaryGrowth").value, plan: $("plan").value, overpay: $("overpay").value };
+      $("career").value = s.career;           // …so lend them to this scenario briefly
+      $("startSalary").value = s.startSalary;
+      $("salaryGrowth").value = s.growth;
+      $("plan").value = s.plan;
+      $("overpay").value = s.overpay;
+
+      var sim = E.simulate(scenario());
+      sim.meta = SCEN_META[i];
+      sim.index = i;
+      sim.settings = s;
+      out.push(sim);
+
+      $("career").value = saved.career;
+      $("startSalary").value = saved.startSalary;
+      $("salaryGrowth").value = saved.growth;
+      $("plan").value = saved.plan;
+      $("overpay").value = saved.overpay;
+    });
+    state.active = keep;
+    return out;
+  }
+
+  /* ---- the comparison headline ------------------------------------------ */
+
+  function renderHero(runs) {
+    var cells = runs.map(function (sim) {
+      var r = sim.combined;
+      var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+      var first = repaying.filter(function (y) { return y.monthlyRepayment > 0; })[0];
+      var name = scenarioName(sim.settings);
+      return '<div class="hcell' + (sim.index === state.active ? " is-active" : "") +
+        '" data-jump="' + sim.index + '" style="--c:' + sim.meta.colour + '">' +
+        '<p class="hcell__who"><span class="dot"></span>' + sim.meta.id + " · " + name + "</p>" +
+        '<p class="hcell__fig">' + gbp(r.totalRepaid) + "</p>" +
+        '<p class="hcell__sub">' +
+          (r.everRepaidInFull ? "cleared " + r.clearedLabel : gbp(r.writtenOff) + " written off") +
+          " · " + (first ? gbp(first.monthlyRepayment) + "/mo at first" : "never deducted") +
+        "</p></div>";
+    });
+
+    if (state.showNoLoan) {
+      cells.push('<div class="hcell is-ghost"><p class="hcell__who"><span class="dot"></span>No loan</p>' +
+        '<p class="hcell__fig">£0</p><p class="hcell__sub">nothing is ever deducted</p></div>');
+    }
+
+    $("heroRow").innerHTML = cells.join("");
+
+    // The spread between the cheapest and dearest run is the point of the page.
+    if (runs.length > 1) {
+      var tot = runs.map(function (s) { return s.combined.totalRepaid; });
+      var lo = Math.min.apply(null, tot), hi = Math.max.apply(null, tot);
+      var loRun = runs[tot.indexOf(lo)], hiRun = runs[tot.indexOf(hi)];
+      $("heroGap").innerHTML = hi - lo < 1 ? "" :
+        "<b>" + gbp(hi - lo) + "</b> between " + hiRun.meta.id + " and " + loRun.meta.id +
+        " — the same rules, a different life.";
+    } else {
+      var only = runs[0].combined;
+      $("heroGap").innerHTML = "<b>" + gbp(only.totalRepaid) + "</b> is what the loan costs you; " +
+        "without one you would keep every penny of it.";
+    }
+  }
+
+  function scenarioName(s) {
+    var c = CAREERS.filter(function (x) { return x.id === s.career; })[0];
+    return c && c.id !== "custom" ? c.label : gbpShort(s.startSalary) + " start";
+  }
 
   function renderSensitivity(sim) {
     var base = scenario();
@@ -446,191 +606,295 @@
   // Is the reader looking at cash of the day, or today's money?
   function scaled(y, v) { return state.basis === "real" ? v * y.deflator : v; }
 
-  /* ---- 1. the balance, and what you have paid --------------------------- */
+  /* ---- 1. balance outstanding, one line per scenario -------------------- */
 
-  function renderChart(sim) {
-    var years = sim.combined.years;
+  function renderChart(runs) {
     var real = state.basis === "real";
-
-    // In today's money the running total has to be accumulated from each
-    // year's deflated payment, not deflated once at the end.
-    var cumReal = 0;
-    var pts = years.map(function (y) {
-      cumReal += y.realRepaid;
+    var series = runs.map(function (sim) {
       return {
-        taxYear: y.taxYear, label: y.label,
-        balance: real ? y.realClosingBalance : y.closingBalance,
-        repaid: real ? cumReal : y.cumRepaid,
-        interest: real ? y.cumInterest * y.deflator : y.cumInterest
+        meta: sim.meta,
+        pts: sim.combined.years.map(function (y) {
+          return { taxYear: y.taxYear, label: y.label,
+                   v: real ? y.realClosingBalance : y.closingBalance };
+        }),
+        done: sim.combined.everRepaidInFull
       };
     });
+    var f = spanFrame(runs, series, gbpShort, "Balance outstanding by tax year", 760, 300);
 
-    var max = 0;
-    pts.forEach(function (p) { max = Math.max(max, p.balance, p.repaid, p.interest); });
-    var s = niceScale(max);
-    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
-                    top: s.top, step: s.step, fmt: gbpShort, title: "Balance outstanding, total repaid and total interest, by tax year" });
+    var body = series.map(function (S) {
+      return '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour +
+        '" stroke-width="2.25"/>' + endDot(S, f);
+    }).join("");
 
-    var area = polyline(pts, f, "balance") +
-      " L" + f.x(pts[pts.length - 1].taxYear).toFixed(1) + " " + f.y(0) +
-      " L" + f.x(pts[0].taxYear).toFixed(1) + " " + f.y(0) + " Z";
+    $("chart").innerHTML = f.open + body + f.close;
+    $("chartKey").innerHTML = runKeys(runs) +
+      '<i style="color:var(--ink-4)">each line ends where that loan does</i>';
+  }
 
-    var endX = f.x(pts[pts.length - 1].taxYear);
-    var done = sim.combined.everRepaidInFull;
-    var endLabel = done ? "cleared" : "written off";
-    var endColour = done ? "var(--good)" : "var(--bad)";
-    var marker =
-      '<line x1="' + endX.toFixed(1) + '" y1="' + f.mt + '" x2="' + endX.toFixed(1) + '" y2="' + (f.mt + f.ih) +
-      '" stroke="' + endColour + '" stroke-width="1" stroke-dasharray="3 3"/>' +
-      '<rect x="' + (endX - 12 - endLabel.length * 6.2).toFixed(1) + '" y="' + (f.mt + 1) +
-      '" width="' + (endLabel.length * 6.2 + 10).toFixed(1) + '" height="16" rx="3" fill="var(--bg-3)"/>' +
-      '<text x="' + (endX - 7).toFixed(1) + '" y="' + (f.mt + 13) +
-      '" text-anchor="end" font-size="11" font-weight="600" fill="' + endColour + '">' + endLabel + "</text>";
-
-    $("chart").innerHTML = f.open +
-      '<path d="' + area + '" fill="var(--info-bg)"/>' +
-      '<path d="' + polyline(pts, f, "balance") + '" fill="none" stroke="var(--info)" stroke-width="2"/>' +
-      '<path d="' + polyline(pts, f, "interest") + '" fill="none" stroke="var(--warn)" stroke-width="1.75" stroke-dasharray="4 3"/>' +
-      '<path d="' + polyline(pts, f, "repaid") + '" fill="none" stroke="var(--good)" stroke-width="2.25"/>' +
-      marker + f.close;
-
-    $("chartKey").innerHTML =
-      '<i class="k-bal">Still owed</i><i class="k-paid">Repaid, running total</i>' +
-      '<i class="k-int">Interest charged, running total</i>';
+  function endDot(S, f) {
+    var last = S.pts[S.pts.length - 1];
+    return '<circle cx="' + f.x(last.taxYear).toFixed(1) + '" cy="' + f.y(last.v).toFixed(1) +
+      '" r="3.5" fill="' + (S.done ? S.meta.colour : "var(--bad)") + '"/>';
   }
 
   /* ---- 2. salary against the threshold ---------------------------------- */
 
-  function renderSalaryChart(sim) {
-    var years = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
-    if (!years.length) { $("salaryChart").innerHTML = ""; $("salaryKey").innerHTML = ""; return; }
-
-    var pts = years.map(function (y) {
-      return {
-        taxYear: y.taxYear, label: y.label,
-        salary: scaled(y, y.salary),
-        threshold: scaled(y, y.threshold || 0)
-      };
+  function renderSalaryChart(runs) {
+    var series = runs.map(function (sim) {
+      var ys = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
+      return { meta: sim.meta,
+        pts: ys.map(function (y) { return { taxYear: y.taxYear, label: y.label, v: scaled(y, y.salary) }; }),
+        thr: ys.map(function (y) { return { taxYear: y.taxYear, label: y.label, v: scaled(y, y.threshold || 0) }; }) };
     });
-    pts.forEach(function (p) { p.upper = Math.max(p.salary, p.threshold); });
+    if (!series.length || !series[0].pts.length) { $("salaryChart").innerHTML = ""; return; }
 
-    var max = 0;
-    pts.forEach(function (p) { max = Math.max(max, p.salary, p.threshold); });
-    var s = niceScale(max);
-    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
-                    top: s.top, step: s.step, fmt: gbpShort, w: 440, h: 250,
-                    title: "Gross salary against the repayment threshold, by tax year" });
+    var all = series.map(function (S) { return { pts: S.pts.concat(S.thr) }; });
+    var f = spanFrame(runs, all, gbpShort, "Gross salary against the repayment threshold", 440, 260, true);
 
-    // The band between the two lines is the only part that is ever charged.
-    var band = polyline(pts, f, "upper") + " " +
-      pts.slice().reverse().map(function (p) {
-        return "L" + f.x(p.taxYear).toFixed(1) + " " + f.y(p.threshold).toFixed(1);
+    var body = series.map(function (S) {
+      var band = S.pts.map(function (p, i) {
+        return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(Math.max(p.v, S.thr[i].v)).toFixed(1);
+      }).join(" ") + " " + S.thr.slice().reverse().map(function (p) {
+        return "L" + f.x(p.taxYear).toFixed(1) + " " + f.y(p.v).toFixed(1);
       }).join(" ") + " Z";
+      return '<path d="' + band + '" fill="' + S.meta.colour + '" opacity=".13"/>' +
+        '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour + '" stroke-width="2"/>';
+    }).join("");
 
-    $("salaryChart").innerHTML = f.open +
-      '<path d="' + band + '" fill="var(--good)" opacity=".16"/>' +
-      '<path d="' + polyline(pts, f, "threshold") + '" fill="none" stroke="var(--warn)" stroke-width="1.75" stroke-dasharray="5 3"/>' +
-      '<path d="' + polyline(pts, f, "salary") + '" fill="none" stroke="var(--good)" stroke-width="2.25"/>' +
-      f.close;
+    // One threshold line: it is the same law for everyone on the same plan.
+    var thrLine = '<path d="' + line(series[0].thr, f) +
+      '" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-dasharray="5 3"/>';
 
-    var first = pts[0], last = pts[pts.length - 1];
-    var gapNow = Math.max(0, first.salary - first.threshold);
-    var gapEnd = Math.max(0, last.salary - last.threshold);
-    $("salaryKey").innerHTML =
-      '<i class="k-paid">Gross salary</i><i class="k-int">Threshold</i>' +
-      '<i style="color:var(--ink-3)">Charged on ' + gbp(gapNow) + " at the start, " + gbp(gapEnd) + " at the end</i>";
+    $("salaryChart").innerHTML = f.open + body + thrLine + f.close;
+    $("salaryKey").innerHTML = runKeys(runs) + '<i class="k-int">Threshold</i>';
   }
 
   /* ---- 3. what leaves your pay each month ------------------------------- */
 
-  function renderMonthlyChart(sim) {
-    var years = sim.combined.years.filter(function (y) { return y.phase === "repaying"; });
-    if (!years.length) { $("monthlyChart").innerHTML = ""; $("monthlyKey").innerHTML = ""; return; }
-
-    var pts = years.map(function (y) {
-      return { taxYear: y.taxYear, label: y.label, monthly: scaled(y, y.monthlyRepayment) };
+  function renderMonthlyChart(runs) {
+    var series = runs.map(function (sim) {
+      return { meta: sim.meta, pts: sim.combined.years
+        .filter(function (y) { return y.phase === "repaying"; })
+        .map(function (y) { return { taxYear: y.taxYear, label: y.label, v: scaled(y, y.monthlyRepayment) }; }) };
     });
+    if (!series.length || !series[0].pts.length) { $("monthlyChart").innerHTML = ""; return; }
 
-    var max = 0;
-    pts.forEach(function (p) { max = Math.max(max, p.monthly); });
-    var s = niceScale(max);
-    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
-                    top: s.top, step: s.step, fmt: function (v) { return "£" + Math.round(v); },
-                    w: 440, h: 250, title: "Monthly repayment, by tax year" });
+    var f = spanFrame(runs, series, function (v) { return "£" + Math.round(v); },
+                      "Monthly repayment by tax year", 440, 260, true);
 
-    var area = polyline(pts, f, "monthly") +
-      " L" + f.x(pts[pts.length - 1].taxYear).toFixed(1) + " " + f.y(0) +
-      " L" + f.x(pts[0].taxYear).toFixed(1) + " " + f.y(0) + " Z";
+    var body = series.map(function (S) {
+      return '<path d="' + area(S.pts, f) + '" fill="' + S.meta.colour + '" opacity=".10"/>' +
+             '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour + '" stroke-width="2"/>';
+    }).join("");
 
-    var peak = pts.reduce(function (m, p) { return p.monthly > m.monthly ? p : m; }, pts[0]);
+    var zero = state.showNoLoan
+      ? '<line x1="' + f.ml + '" y1="' + f.y(0).toFixed(1) + '" x2="' + (f.W - 14) + '" y2="' + f.y(0).toFixed(1) +
+        '" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="4 3"/>'
+      : "";
 
-    $("monthlyChart").innerHTML = f.open +
-      '<path d="' + area + '" fill="var(--good)" opacity=".16"/>' +
-      '<path d="' + polyline(pts, f, "monthly") + '" fill="none" stroke="var(--good)" stroke-width="2.25"/>' +
-      '<circle cx="' + f.x(peak.taxYear).toFixed(1) + '" cy="' + f.y(peak.monthly).toFixed(1) +
-      '" r="3.5" fill="var(--good)"/>' + f.close;
-
-    $("monthlyKey").innerHTML =
-      '<i class="k-paid">Deducted each month</i>' +
-      '<i style="color:var(--ink-3)">' + gbp(pts[0].monthly) + " at the start, peaking at " +
-      gbp(peak.monthly) + " in " + peak.label + "</i>";
+    $("monthlyChart").innerHTML = f.open + zero + body + f.close;
+    $("monthlyKey").innerHTML = runKeys(runs) +
+      (state.showNoLoan ? '<i style="color:var(--ink-3)">No loan — £0, always</i>' : "");
   }
 
   /* ---- 4. the interest rate --------------------------------------------- */
 
-  function renderRateChart(sim) {
-    var years = sim.combined.years;
-    var a = sim.assumptions;
-
-    var lines = sim.loans.map(function (r, i) {
-      return {
-        label: r.planLabel,
-        colour: i === 0 ? "var(--warn)" : "var(--good)",
-        points: r.years.map(function (y) { return { taxYear: y.taxYear, rate: y.rateHigh }; })
-      };
+  function renderRateChart(runs) {
+    var a = runs[0].assumptions;
+    var series = [];
+    runs.forEach(function (sim) {
+      sim.loans.forEach(function (r, k) {
+        series.push({
+          meta: sim.meta,
+          dash: k > 0,
+          label: sim.meta.id + " · " + r.planLabel,
+          pts: r.years.map(function (y) { return { taxYear: y.taxYear, label: y.label, v: y.rateHigh }; })
+        });
+      });
     });
 
     var max = a.rpi;
-    lines.forEach(function (L) { L.points.forEach(function (p) { max = Math.max(max, p.rate); }); });
+    series.forEach(function (S) { S.pts.forEach(function (p) { max = Math.max(max, p.v); }); });
     var top = Math.ceil(max * 100 + 0.5) / 100;
-    var step = top > 0.08 ? 0.02 : 0.01;
+    var f = spanFrame(runs, series, function (v) { return (v * 100).toFixed(0) + "%"; },
+                      "Interest rate charged by tax year", 440, 260, false, { top: top, step: top > 0.08 ? 0.02 : 0.01 });
 
-    var f = frame({ years: years, xMin: years[0].taxYear, xMax: years[years.length - 1].taxYear,
-                    top: top, step: step, w: 440, h: 250,
-                    fmt: function (v) { return (v * 100).toFixed(0) + "%"; },
-                    title: "The interest rate charged, by tax year" });
-
-    // RPI itself, for reference: the gap to it is the whole of the "+3%" story.
     var rpiLine = '<line x1="' + f.ml + '" y1="' + f.y(a.rpi).toFixed(1) + '" x2="' + (f.W - 14) +
       '" y2="' + f.y(a.rpi).toFixed(1) + '" stroke="var(--ink-4)" stroke-width="1" stroke-dasharray="2 4"/>';
 
-    var repayAt = years.filter(function (y) { return y.phase === "repaying"; })[0];
-    var startMark = "";
-    if (repayAt && repayAt.taxYear > years[0].taxYear) {
-      var mx = f.x(repayAt.taxYear);
-      startMark = '<line x1="' + mx.toFixed(1) + '" y1="' + f.mt + '" x2="' + mx.toFixed(1) +
-        '" y2="' + (f.mt + f.ih) + '" stroke="var(--line-2)" stroke-width="1"/>' +
-        '<text x="' + (mx + 5).toFixed(1) + '" y="' + (f.mt + 11) +
-        '" font-size="10" fill="var(--ink-4)">repayment starts</text>';
-    }
-
-    // A step line: the rate holds for a whole tax year, then jumps on 6 April.
-    var paths = lines.map(function (L) {
+    var body = series.map(function (S) {
       var d = "", prev = null;
-      L.points.forEach(function (p, i) {
-        var px = f.x(p.taxYear), py = f.y(p.rate);
+      S.pts.forEach(function (p, i) {
+        var px = f.x(p.taxYear), py = f.y(p.v);
         if (i === 0) d += "M" + px.toFixed(1) + " " + py.toFixed(1);
         else d += "L" + px.toFixed(1) + " " + prev.toFixed(1) + "L" + px.toFixed(1) + " " + py.toFixed(1);
         prev = py;
       });
-      return '<path d="' + d + '" fill="none" stroke="' + L.colour + '" stroke-width="2" stroke-linejoin="round"/>';
+      return '<path d="' + d + '" fill="none" stroke="' + S.meta.colour + '" stroke-width="2"' +
+        (S.dash ? ' stroke-dasharray="4 3"' : "") + ' stroke-linejoin="round"/>';
     }).join("");
 
-    $("rateChart").innerHTML = f.open + rpiLine + startMark + paths + f.close;
-    $("rateKey").innerHTML = lines.map(function (L) {
-      return '<i style="color:' + L.colour + '">' + L.label + "</i>";
-    }).join("") + '<i style="color:var(--ink-4)">RPI, ' + pct(a.rpi) + "</i>";
-    $("rateNote").textContent = rateExplanation(sim);
+    $("rateChart").innerHTML = f.open + rpiLine + body + f.close;
+    $("rateKey").innerHTML = runKeys(runs) + '<i style="color:var(--ink-4)">RPI, ' + pct(a.rpi) + "</i>";
+    $("rateNote").textContent = rateExplanation(runs[0]);
+  }
+
+  /* ---- 5. where it ends up, for the selected scenario -------------------- */
+
+  function renderFlowChart(runs) {
+    var sim = runs.filter(function (s) { return s.index === state.active; })[0] || runs[0];
+    var r = sim.combined;
+    var total = r.borrowed + r.totalInterest;
+    if (!(total > 0)) { $("flowChart").innerHTML = ""; $("flowKey").innerHTML = ""; return; }
+
+    var W = 440, H = 200, ml = 10, iw = W - 20, barH = 46, gap = 26, top = 30;
+    var bar = function (yPos, segs) {
+      var xc = ml, out = "";
+      segs.forEach(function (s) {
+        var w = (s.value / total) * iw;
+        if (w <= 0) return;
+        out += '<rect x="' + xc.toFixed(1) + '" y="' + yPos + '" width="' + w.toFixed(1) +
+          '" height="' + barH + '" fill="' + s.colour + '"/>';
+        if (w > 104) {
+          out += '<text x="' + (xc + 10).toFixed(1) + '" y="' + (yPos + 19) +
+            '" font-size="12.5" font-weight="600" fill="#0b0e13">' + s.label + "</text>" +
+            '<text x="' + (xc + 10).toFixed(1) + '" y="' + (yPos + 35) +
+            '" font-size="13" fill="#0b0e13" opacity=".88">' + gbp(s.value) + "</text>";
+        }
+        xc += w;
+      });
+      return out;
+    };
+    var cap = function (t, y) {
+      return '<text x="' + ml + '" y="' + y + '" font-size="12" font-weight="600" letter-spacing=".05em" ' +
+        'fill="var(--ink-4)">' + t.toUpperCase() + "</text>";
+    };
+
+    $("flowChart").innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="What you were charged, and where it ended up">' +
+      cap("Scenario " + sim.meta.id + " — charged", top - 10) +
+      bar(top, [{ label: "Borrowed", value: r.borrowed, colour: "var(--info)" },
+                { label: "Interest", value: r.totalInterest, colour: "var(--warn)" }]) +
+      cap("Where it went", top + barH + gap + 10) +
+      bar(top + barH + gap + 20, [{ label: "You repaid", value: r.totalRepaid, colour: sim.meta.colour },
+                                  { label: "Written off", value: r.writtenOff || 0, colour: "var(--bad)" }]) +
+      "</svg>";
+
+    $("flowKey").innerHTML = '<i style="color:var(--info)">Borrowed</i><i class="k-int">Interest</i>' +
+      '<i style="color:' + sim.meta.colour + '">Repaid</i>' +
+      ((r.writtenOff || 0) > 0 ? '<i style="color:var(--bad)">Written off</i>' : "") +
+      '<i style="color:var(--ink-4)">£' + r.perPoundBorrowed.toFixed(2) + " per £1 borrowed</i>";
+  }
+
+  /* ---- 6. the running cost of having a loan ------------------------------ *
+   * The whole comparison in one picture: each line is money gone for good,
+   * and the flat line along the bottom is the life where you never borrowed.
+   * ---------------------------------------------------------------------- */
+
+  function renderCostChart(runs) {
+    var real = state.basis === "real";
+    var series = runs.map(function (sim) {
+      var cum = 0;
+      return { meta: sim.meta, pts: sim.combined.years.map(function (y) {
+        cum += real ? y.realRepaid : (y.repaid + y.voluntary);
+        return { taxYear: y.taxYear, label: y.label, v: cum };
+      }) };
+    });
+    var f = spanFrame(runs, series, gbpShort, "Total handed over, accumulating, by tax year", 760, 280);
+
+    var body = series.map(function (S) {
+      return '<path d="' + area(S.pts, f) + '" fill="' + S.meta.colour + '" opacity=".08"/>' +
+             '<path d="' + line(S.pts, f) + '" fill="none" stroke="' + S.meta.colour + '" stroke-width="2.25"/>';
+    }).join("");
+
+    var zero = state.showNoLoan
+      ? '<line x1="' + f.ml + '" y1="' + f.y(0).toFixed(1) + '" x2="' + (f.W - 14) + '" y2="' + f.y(0).toFixed(1) +
+        '" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="5 4"/>' +
+        '<text x="' + (f.W - 18) + '" y="' + (f.y(0) - 8).toFixed(1) +
+        '" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink-3)">No loan \u2014 you keep it all</text>'
+      : "";
+
+    $("costChart").innerHTML = f.open + zero + body + f.close;
+    $("costKey").innerHTML = runKeys(runs) +
+      (state.showNoLoan ? '<i style="color:var(--ink-3)">Never borrowed</i>' : "");
+  }
+
+  /* ---- 7. side by side --------------------------------------------------- */
+
+  function renderBarsChart(runs) {
+    var rows = runs.map(function (sim) {
+      return { label: sim.meta.id + " · " + scenarioName(sim.settings),
+               value: sim.combined.totalRepaid, colour: sim.meta.colour,
+               note: sim.combined.everRepaidInFull
+                 ? "cleared " + sim.combined.clearedLabel
+                 : gbp(sim.combined.writtenOff) + " written off" };
+    });
+    if (state.showNoLoan) rows.push({ label: "No loan", value: 0, colour: "var(--ink-3)", note: "you keep it all" });
+
+    var max = Math.max.apply(null, rows.map(function (r) { return r.value; })) || 1;
+    var rowH = 46, padT = 8, W = 760, labelW = 238, barW = W - labelW - 132;
+    var H = padT * 2 + rows.length * rowH;
+
+    var body = rows.map(function (r, i) {
+      var y = padT + i * rowH;
+      var w = Math.max((r.value / max) * barW, r.value > 0 ? 2 : 0);
+      return '<text x="0" y="' + (y + 18) + '" font-size="13" font-weight="600" fill="var(--ink-2)">' + r.label + "</text>" +
+        '<text x="0" y="' + (y + 33) + '" font-size="11" fill="var(--ink-4)">' + r.note + "</text>" +
+        '<rect x="' + labelW + '" y="' + (y + 6) + '" width="' + w.toFixed(1) + '" height="22" rx="3" fill="' + r.colour + '"/>' +
+        '<text x="' + (labelW + w + 10).toFixed(1) + '" y="' + (y + 22) +
+        '" font-size="13" font-family="ui-monospace,monospace" fill="var(--ink)">' + gbp(r.value) + "</text>";
+    }).join("");
+
+    $("barsChart").innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Lifetime cost of each scenario">' + body + "</svg>";
+    $("barsKey").innerHTML = '<i style="color:var(--ink-4)">Cash handed over across the whole term</i>';
+  }
+
+  /* ---- shared plumbing --------------------------------------------------- */
+
+  function line(pts, f) {
+    return pts.map(function (p, i) {
+      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p.v).toFixed(1);
+    }).join(" ");
+  }
+  function area(pts, f) {
+    return line(pts, f) + " L" + f.x(pts[pts.length - 1].taxYear).toFixed(1) + " " + f.y(0) +
+           " L" + f.x(pts[0].taxYear).toFixed(1) + " " + f.y(0) + " Z";
+  }
+
+  // One frame wide enough for every scenario on the chart, so the lines are
+  // read against the same axes rather than each against its own.
+  function spanFrame(runs, series, fmt, title, w, h, narrow, forced) {
+    var lo = Infinity, hi = -Infinity, max = 0, years = null;
+    series.forEach(function (S) {
+      S.pts.forEach(function (p) {
+        if (p.taxYear < lo) lo = p.taxYear;
+        if (p.taxYear > hi) hi = p.taxYear;
+        if (p.v > max) max = p.v;
+      });
+      if (!years || S.pts.length > years.length) years = S.pts;
+    });
+    var s = forced || niceScale(max);
+    return frame({ years: years, xMin: lo, xMax: hi, top: s.top, step: s.step,
+                   fmt: fmt, title: title, w: w, h: h });
+  }
+
+  function runKeys(runs) {
+    return runs.map(function (sim) {
+      return '<i style="color:' + sim.meta.colour + '">' + sim.meta.id + " · " +
+        scenarioName(sim.settings) + "</i>";
+    }).join("");
+  }
+
+  function renderAllCharts(runs) {
+    renderChart(runs);
+    renderSalaryChart(runs);
+    renderMonthlyChart(runs);
+    renderRateChart(runs);
+    renderFlowChart(runs);
+    renderCostChart(runs);
+    renderBarsChart(runs);
   }
 
   function rateExplanation(sim) {
@@ -655,73 +919,6 @@
       : "";
 
     return "Charged at " + range + ". " + why + capped;
-  }
-
-  /* ---- 5. where it all ends up ------------------------------------------ *
-   * Two bars of identical length, because they are the same money seen from
-   * each end: borrowed + interest charged = repaid + written off, exactly.
-   * ---------------------------------------------------------------------- */
-
-  function renderFlowChart(sim) {
-    var r = sim.combined;
-    var total = r.borrowed + r.totalInterest;
-    if (!(total > 0)) { $("flowChart").innerHTML = ""; $("flowKey").innerHTML = ""; return; }
-
-    var W = 440, H = 200, ml = 10, mr = 10, iw = W - ml - mr;
-    var barH = 46, gap = 26, top = 30;
-
-    var bar = function (yPos, segs) {
-      var xCur = ml, out = "";
-      segs.forEach(function (s) {
-        var w = (s.value / total) * iw;
-        if (w <= 0) return;
-        out += '<rect x="' + xCur.toFixed(1) + '" y="' + yPos + '" width="' + w.toFixed(1) +
-          '" height="' + barH + '" fill="' + s.colour + '" opacity="' + (s.opacity || 1) + '"/>';
-        // Only label a segment wide enough to hold the words.
-        if (w > 104) {
-          out += '<text x="' + (xCur + 10).toFixed(1) + '" y="' + (yPos + 19) +
-            '" font-size="12.5" font-weight="600" fill="' + "#0b0e13" + '">' + s.label + "</text>" +
-            '<text x="' + (xCur + 10).toFixed(1) + '" y="' + (yPos + 35) +
-            '" font-size="13" fill="' + "#0b0e13" + '" opacity=".88">' + gbp(s.value) + "</text>";
-        }
-        xCur += w;
-      });
-      return out;
-    };
-
-    var charged = [
-      { label: "Borrowed", value: r.borrowed, colour: "var(--info)" },
-      { label: "Interest charged", value: r.totalInterest, colour: "var(--warn)" }
-    ];
-    var landed = [
-      { label: "You repaid", value: r.totalRepaid, colour: "var(--good)" },
-      { label: "Written off", value: r.writtenOff || 0, colour: "var(--bad)" }
-    ];
-
-    var caption = function (t, yPos) {
-      return '<text x="' + ml + '" y="' + yPos + '" font-size="12" font-weight="600" ' +
-        'letter-spacing=".05em" fill="var(--ink-3)">' + t.toUpperCase() + "</text>";
-    };
-
-    $("flowChart").innerHTML =
-      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="What you were charged, and where it ended up">' +
-      caption("What you were charged", top - 10) + bar(top, charged) +
-      caption("Where it went", top + barH + gap + 10) + bar(top + barH + gap + 20, landed) +
-      "</svg>";
-
-    var perPound = r.perPoundBorrowed;
-    $("flowKey").innerHTML =
-      '<i style="color:var(--info)">Borrowed</i><i class="k-int">Interest</i>' +
-      '<i class="k-paid">Repaid</i>' + ((r.writtenOff || 0) > 0 ? '<i style="color:var(--bad)">Written off</i>' : "") +
-      '<i style="color:var(--ink-3)">£' + perPound.toFixed(2) + " handed over per £1 borrowed</i>";
-  }
-
-  function renderAllCharts(sim) {
-    renderChart(sim);
-    renderSalaryChart(sim);
-    renderMonthlyChart(sim);
-    renderRateChart(sim);
-    renderFlowChart(sim);
   }
 
   function renderMilestones(sim) {
@@ -937,7 +1134,11 @@
 
   function save() {
     try {
-      var data = { state: { loanMode: state.loanMode, incomeMode: state.incomeMode, manual: state.manual, manualYears: state.manualYears }, fields: {} };
+      var data = { state: {
+        loanMode: state.loanMode, incomeMode: state.incomeMode,
+        manual: state.manual, manualYears: state.manualYears,
+        scen: state.scen, active: state.active, showNoLoan: state.showNoLoan
+      }, fields: {} };
       FIELDS.forEach(function (id) {
         var el = $(id);
         if (el) data.fields[id] = el.type === "checkbox" ? el.checked : el.value;
@@ -962,6 +1163,9 @@
         state.incomeMode = data.state.incomeMode || "predict";
         state.manual = data.state.manual || {};
         state.manualYears = data.state.manualYears || 12;
+        if (Array.isArray(data.state.scen) && data.state.scen.length === 3) state.scen = data.state.scen;
+        if (typeof data.state.active === "number") state.active = data.state.active;
+        if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
       }
       return true;
     } catch (e) { return false; }
@@ -1027,6 +1231,7 @@
       var btn = ev.target.closest(".pick");
       if (!btn) return;
       $("career").value = btn.dataset.career;
+      captureScenario();
       markCareer();
       if (state.incomeMode === "manual") { state.manual = {}; buildSalaryTable(); }
       run();
@@ -1166,7 +1371,7 @@
       b.addEventListener("click", function () {
         state.basis = b.dataset.basis;
         document.querySelectorAll("[data-basis]").forEach(function (o) { o.classList.toggle("on", o === b); });
-        renderAllCharts(lastSim);
+        renderAllCharts(lastRuns);
       });
     });
 
@@ -1193,6 +1398,19 @@
 
     $("downloadCsv").addEventListener("click", download);
 
+    $("showNoLoan").addEventListener("change", function () {
+      state.showNoLoan = $("showNoLoan").checked;
+      run();
+    });
+
+    // The headline cells are also a way of selecting a scenario.
+    $("heroRow").addEventListener("click", function (ev) {
+      var cell = ev.target.closest("[data-jump]");
+      if (!cell) return;
+      state.active = Number(cell.dataset.jump);
+      loadScenario(); markScens(); run();
+    });
+
     $("form").addEventListener("submit", function (ev) { ev.preventDefault(); });
   }
 
@@ -1206,6 +1424,8 @@
     fillRulesTable();
     buildCareerCards();
     buildLengthChips();
+    buildScenTabs();
+    state.scen = [blankScenario(0), blankScenario(1), blankScenario(2)];
     var restored = restore();
     if (!restored) {
       $("plan").value = "plan5";
@@ -1214,12 +1434,14 @@
     $("pglRow").hidden = !$("hasPgl").checked;
     selectTab($("tab-course").parentNode, state.loanMode);
     selectTab($("tab-predict").parentNode, state.incomeMode);
-    $("planBlurb").textContent = E.RULES[$("plan").value].blurb;
     $("plan").addEventListener("change", function () {
       $("planBlurb").textContent = E.RULES[$("plan").value].blurb;
     });
     if (state.incomeMode === "manual") buildSalaryTable();
     fitSliders();
+    $("showNoLoan").checked = state.showNoLoan;
+    loadScenario();
+    markScens();
     markCareer();
     markLength();
     wire();
