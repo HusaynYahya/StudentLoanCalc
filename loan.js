@@ -1150,12 +1150,18 @@
     }
 
     // It clears. Now the timing argument decides, and often barely.
-    var opts = [
-      { k: "repay", label: "borrow and repay as required", fv: o.pvRepayments },
-      { k: "upfront", label: "pay the fees in cash", fv: o.pvUpfront },
-      { k: "clear", label: "settle it in one payment", fv: o.pvLump }
-    ].filter(function (c) { return c.fv > 0; }).sort(function (a, b) { return a.fv - b.fv; });
+    var opts = (state.loanMode !== "balance"
+      ? [
+          { k: "repay", label: "borrow and repay as required", fv: o.pvRepayments },
+          { k: "upfront", label: "pay the fees in cash", fv: o.pvUpfront }
+        ]
+      : [
+          { k: "repay", label: "keep repaying as required", fv: o.pvRepayments },
+          { k: "clear", label: "pay it all off today", fv: o.pvLump }
+        ]
+    ).filter(function (c) { return c.fv > 0; }).sort(function (a, b) { return a.fv - b.fv; });
 
+    var atStartRec = state.loanMode !== "balance";
     var best = opts[0], worst = opts[opts.length - 1];
     var spread = worst.fv - best.fv;
     var margin = best.fv > 0 ? spread / best.fv : 0;
@@ -1175,8 +1181,9 @@
     }
 
     return { tone: best.k === "repay" ? "good" : "warn",
-      verdict: best.k === "repay" ? "Take the loan and repay as required."
-             : best.k === "clear" ? "Settle the balance in one payment if you can."
+      verdict: best.k === "repay"
+                 ? (atStartRec ? "Take the loan and repay as required." : "Keep repaying as required.")
+             : best.k === "clear" ? "Pay it off today if you can."
              : "Pay the fees in cash if you can.",
       body: "In " + E.taxYearLabel(o.baseYear) + " money that comes to <b>" + gbp(best.fv) +
             "</b> against <b>" + gbp(worst.fv) + "</b> for the dearest \u2014 <b>" + gbp(spread) +
@@ -1320,21 +1327,28 @@
       g.rows.push(row);
     });
 
-    var choices = [
-      { key: "repay",   k: "Borrow and repay",        cash: r.totalRepaid, fv: o.pvRepayments,
-        why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
-      { key: "upfront", k: "Pay the fees in cash",    cash: o.upfrontPaid, fv: o.pvUpfront,
-        why: "all of it while you study" },
-      { key: "clear",   k: "Settle it in one payment", cash: o.lump,        fv: o.pvLump,
-        why: "the whole balance, the April repayments begin" }
-    ].filter(function (c) { return c.cash > 0; })
-     // With an opening balance there are no fees to find, so "pay your own
-     // way" and "settle it outright" are the same act — list it once.
-     .filter(function (c, i, all) {
-       return !all.some(function (other, k) {
-         return k < i && Math.abs(other.cash - c.cash) < 1 && Math.abs(other.fv - c.fv) < 1;
-       });
-     })
+    // Which alternatives exist depends on where you are standing. Before the
+    // course, the choice is whether to borrow at all; once you owe something,
+    // the fees are long spent and the only question left is whether to clear
+    // it. Offering both at once produced two rows a hair apart — the study
+    // interest, near enough cancelled by discounting it — which read as the
+    // same thing said twice, and fairly so.
+    var atStart = state.loanMode !== "balance";
+
+    var choices = (atStart
+      ? [
+          { key: "repay",   k: "Borrow and repay",     cash: r.totalRepaid, fv: o.pvRepayments,
+            why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
+          { key: "upfront", k: "Pay the fees in cash", cash: o.upfrontPaid, fv: o.pvUpfront,
+            why: "never borrow — find it as the fees fall due" }
+        ]
+      : [
+          { key: "repay",   k: "Keep repaying as required", cash: r.totalRepaid, fv: o.pvRepayments,
+            why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
+          { key: "clear",   k: "Pay it all off today",      cash: o.lump,        fv: o.pvLump,
+            why: "the whole balance as it stands now" }
+        ]
+    ).filter(function (c) { return c.cash > 0; })
      // Cheapest first, so the answer is the first thing read rather than
      // something to be hunted for down a fixed list.
      .sort(function (a, b) { return a.fv - b.fv; });
@@ -1383,17 +1397,18 @@
     $("oppVerdict").innerHTML = o.years === 0
       ? "Nothing is ever deducted on this profile, so there is nothing to weigh against saving."
       : (function () {
+          var owing = state.loanMode === "balance";
+          var alt = owing ? o.lump : o.upfrontPaid;
           var cash = "In cash the loan looks like <b>" + gbp(r.totalRepaid) + "</b> against <b>" +
-            gbp(o.upfrontPaid) + "</b> to have paid the fees yourself. " +
-            "But those fees leave your hands during the course and the repayments trickle out over " +
-            r.yearsRepaying + " years, so the two are not the same money. ";
-          var priced = "Carried to " + endLabel + " at " + pct(o.savingsRate) + ", they come to <b>" +
-            gbp(o.fvRepayments) + "</b> and <b>" + gbp(o.fvUpfront) + "</b>";
-          var clear = o.lump > 0 ? ", against <b>" + gbp(o.fvLump) + "</b> to settle it outright" : "";
-          var wins = o.cheapest
-            ? " — so the cheapest of them is to <b>" + o.cheapest.label + "</b>."
-            : ".";
-          return cash + priced + clear + wins;
+            gbp(alt) + "</b> to " + (owing ? "clear it outright today" : "have paid the fees yourself") +
+            ". But that money leaves your hands " + (owing ? "now" : "during the course") +
+            " and the repayments trickle out over " + r.yearsRepaying +
+            " years, so the two are not the same money. ";
+          var priced = "In " + E.taxYearLabel(o.baseYear) + " money they come to <b>" +
+            gbp(o.pvRepayments) + "</b> and <b>" + gbp(owing ? o.pvLump : o.pvUpfront) + "</b>";
+          var better = o.pvRepayments <= (owing ? o.pvLump : o.pvUpfront)
+            ? "repaying as required" : (owing ? "clearing it today" : "paying the fees in cash");
+          return cash + priced + " — so the cheaper of the two is <b>" + better + "</b>.";
         })();
   }
 
@@ -1448,10 +1463,15 @@
       '<i style="color:var(--ink-3)">Never settling</i>' +
       '<i style="color:var(--ink-4)">settling in ' + first.label + " costs " + gbp(first.cost) + "</i>";
 
+    var wipedOut = sim.combined.writtenOff || 0;
     $("settleNote").innerHTML = (best && best.taxYear == null)
-      ? "There is no good year to settle this one. Every year costs more than simply letting the " +
-        "deductions run, because <b>" + gbp(sim.combined.writtenOff || 0) + "</b> of it is written " +
-        "off in " + sim.combined.writeOffLabel + " and settling buys out a debt you were never going to pay."
+      ? "There is no good year to settle this one. " + (wipedOut > 0
+          ? "Every year costs more than letting the deductions run, because <b>" + gbp(wipedOut) +
+            "</b> of it is written off in " + sim.combined.writeOffLabel +
+            " and settling buys out a debt you were never going to pay."
+          : "The loan clears on its own, and money handed over early earns " + pct(sim.assumptions.savings) +
+            " elsewhere for longer than it saves in interest \u2014 so every year of settling costs more " +
+            "than simply letting the deductions run.")
       : (best
         ? "The cheapest moment to clear it is <b>" + best.label + "</b>, when the balance stands at <b>" +
           gbp(best.balance) + "</b>. Settling then costs <b>" + gbp(best.cost) + "</b> against <b>" +
