@@ -1,3 +1,2133 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
+<meta name="color-scheme" content="dark" />
+<title>Student loan · repayment model</title>
+<style>
+/* ============================================================================
+   STUDENT LOAN — REPAYMENT MODEL
+   A split-screen instrument: controls pinned left, results scrolling right.
+   Dark, high contrast, numbers first. Tokens at the top.
+   ========================================================================== */
+
+:root {
+  --bg:      #0b0e13;   /* the ground */
+  --bg-2:    #10141c;   /* the control panel */
+  --bg-3:    #151b25;   /* cards */
+  --bg-4:    #1c2330;   /* inputs, wells */
+  --bg-5:    #232c3c;   /* hover */
+
+  --line:    #232b39;
+  --line-2:  #2e3849;
+
+  --ink:     #e9eef6;
+  --ink-2:   #a9b6c8;
+  --ink-3:   #74829a;
+  --ink-4:   #4d5a70;
+
+  --good:    #35d6a4;   /* repaid, cleared */
+  --warn:    #f5a524;   /* interest */
+  --bad:     #f2545b;   /* written off */
+  --info:    #5b9dff;   /* borrowed */
+
+  --sA:      #35d6a4;   /* scenario A */
+  --sB:      #5b9dff;   /* scenario B */
+  --sC:      #c084fc;   /* scenario C */
+  --sD:      #fbbf5c;   /* scenario D */
+  --sE:      #fb7185;   /* scenario E */
+  --sA-g:    rgba(53, 214, 164, .18);
+  --sB-g:    rgba(91, 157, 255, .18);
+  --sC-g:    rgba(192, 132, 252, .18);
+  --sD-g:    rgba(251, 191, 92, .18);
+  --sE-g:    rgba(251, 113, 133, .18);
+
+  /* The panel tints to whichever scenario the controls are editing. */
+  --live:    var(--sA);
+  --live-g:  var(--sA-g);
+
+  --good-bg: rgba(53, 214, 164, .12);
+  --warn-bg: rgba(245, 165, 36, .12);
+  --bad-bg:  rgba(242, 84, 91, .12);
+  --info-bg: rgba(91, 157, 255, .12);
+
+  --ui:  ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --num: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", Consolas, "Liberation Mono", monospace;
+
+  --panel-w: 328px;
+  --r: 10px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--ui);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--good); text-underline-offset: 2px; }
+h1, h2, h3 { font-weight: 600; letter-spacing: -.01em; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.skip-link { position: absolute; left: -9999px; top: 0; z-index: 50;
+  background: var(--good); color: #06251c; padding: .6rem 1rem; font-weight: 600; }
+.skip-link:focus { left: 0; }
+:focus-visible { outline: 2px solid var(--good); outline-offset: 2px; border-radius: 4px; }
+
+/* ---- the two halves ---------------------------------------------------- */
+
+.app { display: block; }
+
+@media (min-width: 940px) {
+  .app {
+    display: grid;
+    grid-template-columns: var(--panel-w) minmax(0, 1fr);
+    height: 100vh;
+  }
+  .panel { height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
+  .main  { height: 100vh; overflow-y: auto; overscroll-behavior: contain; }
+}
+
+/* ---- control panel ----------------------------------------------------- */
+
+.panel {
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+  padding: 0 0 3rem;
+}
+.panel__head { padding: 1.25rem 1.15rem 1rem; border-bottom: 1px solid var(--line); }
+.brand {
+  margin: 0 0 .2rem; font-size: .66rem; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+}
+.panel__head h1 { margin: 0; font-size: 1.06rem; color: var(--ink); }
+
+.grp { padding: 1.1rem 1.15rem; border-bottom: 1px solid var(--line); }
+.grp__head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: .6rem; margin-bottom: .85rem; min-height: 26px;
+}
+.grp__head h2 {
+  margin: 0; font-size: .68rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-3); font-weight: 700;
+}
+
+.grp--fold { padding: 0; }
+.grp--fold > summary {
+  padding: 1.1rem 1.15rem; cursor: pointer; list-style: none;
+  display: flex; align-items: baseline; gap: .55rem;
+}
+.grp--fold > summary::-webkit-details-marker { display: none; }
+.grp--fold > summary::after {
+  content: "+"; margin-left: auto; color: var(--ink-4); font-family: var(--num);
+}
+.grp--fold[open] > summary::after { content: "\2212"; }
+.grp--fold > summary h2 {
+  margin: 0; font-size: .68rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-3); font-weight: 700;
+}
+.grp--fold > summary span { font-size: .74rem; color: var(--ink-4); }
+.fold { padding: 0 1.15rem 1.15rem; }
+
+/* ---- a control: label and live value on one line, slider beneath ------- */
+
+.ctl { margin-bottom: 1rem; }
+.ctl:last-child { margin-bottom: 0; }
+.ctl__top { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.ctl__top label { font-size: .82rem; color: var(--ink-2); font-weight: 500; }
+.opt { color: var(--ink-4); font-weight: 400; font-size: .74rem; }
+
+.ctl__val {
+  display: inline-flex; align-items: baseline; gap: 1px;
+  font-family: var(--num); font-size: .92rem; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px dashed var(--line-2); padding-bottom: 1px;
+}
+.ctl__val i { font-style: normal; color: var(--ink-3); font-size: .82rem; }
+.ctl__val input {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0; margin: 0;
+  text-align: right; width: 4.6ch; -moz-appearance: textfield;
+}
+.ctl__val input::-webkit-outer-spin-button,
+.ctl__val input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ctl__val input:focus { outline: none; color: var(--live); }
+.ctl__val:focus-within { border-bottom-color: var(--live); }
+.ctl__val input[id="startSalary"], .ctl__val input[id="openingBalance"] { width: 7.5ch; }
+.ctl__val input[id="tuition"], .ctl__val input[id="maintenance"],
+.ctl__val input[id="pglBalance"], .ctl__val input[id="overpay"] { width: 6.5ch; }
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 18px; margin: .35rem 0 0; padding: 0;
+  background: none; cursor: pointer; display: block;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 3px; border-radius: 99px; background: var(--bg-5); }
+input[type="range"]::-moz-range-track { height: 3px; border-radius: 99px; background: var(--bg-5); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 13px; height: 13px; margin-top: -5px; border-radius: 50%;
+  background: var(--live); box-shadow: 0 0 0 3px var(--live-g);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 13px; height: 13px; border: 0; border-radius: 50%;
+  background: var(--live); box-shadow: 0 0 0 3px var(--live-g);
+}
+input[type="range"]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 5px var(--live-g); }
+input[type="range"]:hover::-moz-range-thumb { box-shadow: 0 0 0 5px var(--live-g); }
+
+select {
+  width: 100%; font: inherit; font-size: .84rem; color: var(--ink);
+  background: var(--bg-4); border: 1px solid var(--line-2);
+  border-radius: 7px; padding: .45rem 1.9rem .45rem .6rem; margin-top: .4rem;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+                    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 52%, calc(100% - 10px) 52%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+select:hover { border-color: var(--ink-4); }
+
+.note { margin: .4rem 0 0; font-size: .755rem; line-height: 1.5; color: var(--ink-4); }
+.note--lede { margin: -.35rem 0 .85rem; color: var(--ink-3); }
+.readout {
+  margin: .85rem 0 0; padding: .55rem .65rem;
+  background: var(--bg-4); border-left: 2px solid var(--good);
+  border-radius: 0 5px 5px 0; font-size: .765rem; line-height: 1.5; color: var(--ink-2);
+}
+.readout b { color: var(--ink); font-family: var(--num); font-variant-numeric: tabular-nums; }
+
+.check { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; cursor: pointer; }
+.check input { width: 15px; height: 15px; accent-color: var(--live); flex: none; }
+.check span { font-size: .82rem; color: var(--ink-2); }
+
+/* ---- segmented control, chips, picks ----------------------------------- */
+
+.seg { display: inline-flex; background: var(--bg-4); border-radius: 7px; padding: 2px; gap: 2px; }
+.seg button {
+  font: inherit; font-size: .74rem; font-weight: 600; cursor: pointer;
+  border: 0; background: none; color: var(--ink-3);
+  padding: .26rem .6rem; border-radius: 5px; white-space: nowrap;
+}
+.seg button:hover { color: var(--ink); }
+.seg button[aria-selected="true"], .seg button.on { background: var(--bg-5); color: var(--live); }
+.seg--sm button { font-size: .76rem; padding: .3rem .72rem; }
+
+.chips { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
+.chip {
+  font: inherit; font-family: var(--num); font-size: .78rem; cursor: pointer;
+  padding: .28rem .55rem; border-radius: 6px;
+  background: var(--bg-4); color: var(--ink-3); border: 1px solid transparent;
+}
+.chip:hover { color: var(--ink); }
+.chip.is-on { background: var(--live-g); color: var(--live); border-color: var(--live); }
+
+.picks { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.pick {
+  font: inherit; text-align: left; cursor: pointer;
+  padding: .38rem .5rem; border-radius: 6px; border: 1px solid transparent;
+  background: var(--bg-4); color: var(--ink-2);
+  display: flex; flex-direction: column; gap: 0; min-width: 0;
+}
+.pick:hover { background: var(--bg-5); color: var(--ink); }
+.pick b { font-size: .755rem; font-weight: 600; line-height: 1.22; }
+.pick span { white-space: nowrap; }
+.pick span { font-family: var(--num); font-size: .68rem; color: var(--ink-4); }
+.pick.is-on { background: var(--live-g); border-color: var(--live); color: var(--live); }
+.pick.is-on span { color: var(--live); opacity: .75; }
+
+.btn {
+  font: inherit; font-size: .74rem; font-weight: 600; cursor: pointer;
+  padding: .32rem .6rem; border-radius: 6px;
+  border: 1px solid var(--line-2); background: var(--bg-4); color: var(--ink-2);
+}
+.btn:hover { background: var(--bg-5); color: var(--ink); }
+.btnrow { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .6rem; }
+
+.years { width: 100%; border-collapse: collapse; font-size: .76rem; }
+.years th {
+  text-align: left; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700; padding: .25rem .3rem; border-bottom: 1px solid var(--line);
+}
+.years td { padding: .1rem .3rem; border-bottom: 1px solid var(--bg-4); font-family: var(--num); }
+.years td:nth-child(2) { color: var(--ink-4); }
+.years input {
+  width: 100%; font: inherit; font-family: var(--num); text-align: right;
+  background: var(--bg-4); color: var(--ink); border: 1px solid transparent;
+  border-radius: 5px; padding: .12rem .35rem;
+}
+.years input:focus { border-color: var(--live); outline: none; }
+
+/* ---- results side ------------------------------------------------------ */
+
+.main { padding: 0 0 4rem; }
+
+.hero {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 1.5rem 2.5rem;
+  padding: 1.6rem clamp(1rem, 3vw, 2rem) 1.4rem;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--bg-3), var(--bg));
+  position: sticky; top: 0; z-index: 5;
+}
+.hero__lead { min-width: 0; }
+.hero__label {
+  margin: 0 0 .1rem; font-size: .66rem; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+}
+.hero__fig {
+  margin: 0; font-family: var(--num); font-size: clamp(2.1rem, 5vw, 3.1rem);
+  line-height: 1; letter-spacing: -.035em; font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.hero__sub { margin: .4rem 0 0; font-size: .84rem; color: var(--ink-3); }
+.hero__sub b { font-weight: 600; }
+.hero__sub .good { color: var(--good); }
+.hero__sub .bad { color: var(--bad); }
+
+.hero__stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, max-content));
+  gap: .55rem 1.7rem; margin: 0; flex: 1 1 auto;
+}
+.hero__stats div { min-width: 0; }
+.hero__stats dt {
+  font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700; margin-bottom: .05rem; white-space: nowrap;
+}
+.hero__stats dd {
+  margin: 0; font-family: var(--num); font-size: .98rem;
+  font-variant-numeric: tabular-nums; color: var(--ink-2);
+}
+.hero__stats dd.good { color: var(--good); }
+.hero__stats dd.warn { color: var(--warn); }
+.hero__stats dd.bad  { color: var(--bad); }
+
+.bar { display: flex; justify-content: flex-end; padding: 1rem clamp(1rem, 3vw, 2rem) 0; }
+
+/* ---- cards ------------------------------------------------------------- */
+
+.cards {
+  display: grid; gap: 1rem; padding: 1rem clamp(1rem, 3vw, 2rem) 0;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 1180px) {
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card--wide { grid-column: 1 / -1; }
+}
+
+.card {
+  margin: 0; background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: var(--r); padding: 1.05rem 1.15rem 1.15rem; min-width: 0;
+}
+.card--flat { margin: 1rem clamp(1rem, 3vw, 2rem) 0; }
+.card figcaption { margin-bottom: .9rem; }
+.card figcaption h3, .card__bar h3, .notes h3 { margin: 0 0 .15rem; font-size: .95rem; color: var(--ink); }
+.card figcaption p { margin: 0; font-size: .765rem; color: var(--ink-4); line-height: 1.5; }
+.card__bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: .6rem; margin-bottom: .3rem;
+}
+.card__bar .btnrow { margin: 0; }
+
+.viz svg { display: block; width: 100%; height: auto; overflow: visible; }
+.key {
+  margin: .75rem 0 0; font-size: .735rem; color: var(--ink-4);
+  display: flex; flex-wrap: wrap; gap: .25rem .95rem;
+}
+.key i { display: inline-flex; align-items: center; gap: .35rem; font-style: normal; }
+.key i::before { content: ""; width: 11px; height: 2px; border-radius: 2px; background: currentColor; }
+.k-bal { color: var(--info); } .k-paid { color: var(--good); } .k-int { color: var(--warn); }
+
+/* ---- sensitivity ------------------------------------------------------- */
+
+.sens { width: 100%; border-collapse: separate; border-spacing: 0 .3rem; table-layout: fixed; }
+.sens .sens-head th {
+  text-align: left; padding: .5rem 0 .1rem; border: 0; font-weight: 600;
+  font-size: .82rem; color: var(--ink-2);
+}
+.sens .sens-head th span { display: block; font-weight: 400; font-size: .73rem; color: var(--ink-4); }
+.sens .sens-cell {
+  border: 1px solid var(--line); background: var(--bg-4);
+  padding: .55rem .7rem; vertical-align: top; width: 33.33%;
+}
+.sens .sens-cell:first-child { border-radius: 7px 0 0 7px; }
+.sens .sens-cell:last-child { border-radius: 0 7px 7px 0; }
+.sens .sens-cell.is-current { background: var(--good-bg); border-color: rgba(53,214,164,.4); }
+.sens .sens-if {
+  display: block; font-size: .64rem; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ink-4); margin-bottom: .12rem;
+}
+.sens .sens-cell.is-current .sens-if { color: var(--good); }
+.sens .sens-amt { display: block; font-family: var(--num); font-size: 1.02rem; font-variant-numeric: tabular-nums; }
+.sens .sens-note { display: block; font-size: .715rem; color: var(--ink-4); margin-top: .1rem; line-height: 1.4; }
+
+/* ---- milestones -------------------------------------------------------- */
+
+.stones { margin: 0; padding: 0; list-style: none; }
+.stones li {
+  display: grid; grid-template-columns: 5.4rem 1fr; gap: .8rem;
+  padding: .5rem 0; border-bottom: 1px solid var(--line); align-items: baseline;
+}
+.stones li:last-child { border-bottom: 0; padding-bottom: 0; }
+.stones .when { font-family: var(--num); font-size: .78rem; color: var(--ink-4); }
+.stones .what { font-size: .85rem; color: var(--ink-2); }
+.stones li.is-cleared .what { color: var(--good); font-weight: 600; }
+.stones li.is-writtenOff .what, .stones li.is-never .what { color: var(--bad); font-weight: 600; }
+.stones li.is-peak .what, .stones li.is-turn .what { color: var(--warn); }
+
+/* ---- tables ------------------------------------------------------------ */
+
+.scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.log, table.rules { width: 100%; border-collapse: collapse; font-size: .795rem; }
+table.log { min-width: 860px; }
+table.rules { min-width: 620px; }
+table.log th, table.rules th {
+  text-align: left; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700; padding: .5rem .55rem;
+  border-bottom: 1px solid var(--line-2); white-space: nowrap;
+  background: var(--bg-3);
+}
+table.log td, table.rules td { padding: .3rem .55rem; border-bottom: 1px solid var(--line); }
+th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: tabular-nums; }
+
+.log tbody tr.year { cursor: pointer; }
+.log tbody tr.year:hover, .log tbody tr.year.is-open { background: var(--bg-4); }
+.log tbody tr.study td { color: var(--ink-4); }
+.log tbody tr.year.is-warn td:nth-child(8) { color: var(--warn); }
+.log .yr { white-space: nowrap; font-family: var(--num); }
+.log .yr::before { content: "\25B8"; display: inline-block; width: 1em; color: var(--ink-4); }
+.log tr.is-open .yr::before { content: "\25BE"; }
+.log tbody tr.months td { padding: 0; background: var(--bg); }
+.log .month-table { width: 100%; border-collapse: collapse; font-size: .74rem; }
+.log .month-table th { position: static; background: none; padding: .3rem .55rem; font-size: .58rem; }
+.log .month-table td { padding: .16rem .55rem; border-bottom: 0; }
+.log tr.final td { border-top: 1px solid var(--line-2); font-weight: 700; color: var(--ink); }
+
+.rules .plan { font-weight: 600; white-space: nowrap; }
+.rules .who { color: var(--ink-4); font-size: .74rem; }
+
+.notes ul { padding-left: 1.1rem; margin: 1.1rem 0; }
+.notes li { margin-bottom: .45rem; font-size: .82rem; color: var(--ink-3); line-height: 1.55; }
+.notes li b { color: var(--ink-2); }
+.notes p { font-size: .8rem; color: var(--ink-4); max-width: 78ch; line-height: 1.6; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+@media (max-width: 939px) {
+  .panel { border-right: 0; border-bottom: 1px solid var(--line); }
+  .hero { position: static; }
+}
+
+/* ---- scenarios --------------------------------------------------------- */
+
+.grp--scen { background: var(--bg); }
+.scens { display: grid; gap: 3px; margin-bottom: .8rem; }
+.scen {
+  display: flex; align-items: stretch; gap: 2px;
+  border-radius: 7px; overflow: hidden; background: var(--bg-4);
+  border: 1px solid transparent;
+}
+.scen.is-active { border-color: var(--line-2); background: var(--bg-5); }
+.scen.is-off { opacity: .45; }
+.scen__pick {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: .45rem;
+  font: inherit; text-align: left; cursor: pointer; border: 0; background: none;
+  color: var(--ink-2); padding: .42rem .5rem;
+}
+.scen__pick:hover { color: var(--ink); }
+.scen__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.scen__id { font-size: .76rem; font-weight: 700; flex: none; white-space: nowrap; }
+.scen__name {
+  font-size: .74rem; color: var(--ink-4); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.scen.is-active .scen__name { color: var(--ink-3); }
+.scen__on {
+  flex: none; width: 30px; border: 0; cursor: pointer;
+  background: none; display: grid; place-items: center;
+}
+.scen__on span[aria-hidden] {
+  width: 13px; height: 13px; border-radius: 4px;
+  border: 1.5px solid var(--ink-4); display: block;
+}
+.scen__on[aria-pressed="true"] span[aria-hidden] {
+  background: var(--ink-3); border-color: var(--ink-3);
+}
+.scen__on:hover span[aria-hidden] { border-color: var(--ink-2); }
+
+.who {
+  font-family: var(--num); font-size: .72rem; font-weight: 700;
+  padding: .05rem .3rem; border-radius: 4px; background: var(--bg-4);
+}
+.noloan-sw { border-bottom: 1px dashed var(--ink-4); }
+
+/* ---- comparison headline ----------------------------------------------- */
+
+.hero { align-items: flex-start; }
+.hero__lead { flex: 1 1 100%; }
+.hero__row { display: flex; flex-wrap: wrap; gap: .5rem 1.6rem; margin-top: .3rem; }
+.hcell {
+  padding: .35rem .7rem .35rem .8rem; border-left: 2px solid var(--c, var(--ink-4));
+  cursor: pointer; border-radius: 0 5px 5px 0; min-width: 0;
+}
+.hcell:hover { background: var(--bg-4); }
+.hcell.is-active { background: var(--bg-4); }
+.hcell.is-ghost { border-left-style: dashed; border-left-color: var(--ink-4); cursor: default; }
+.hcell.is-ghost:hover { background: none; }
+.hcell__who {
+  margin: 0 0 .1rem; font-size: .68rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--c, var(--ink-3));
+  display: flex; align-items: center; gap: .35rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 30ch;
+}
+.hcell.is-ghost .hcell__who { color: var(--ink-4); }
+.hcell__who .dot { display: none; }
+.hcell__fig {
+  margin: 0; font-family: var(--num); font-size: clamp(1.5rem, 3.2vw, 2.2rem);
+  line-height: 1.05; letter-spacing: -.03em; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.hcell.is-ghost .hcell__fig { color: var(--ink-3); }
+.hcell__sub { margin: .15rem 0 0; font-size: .73rem; color: var(--ink-4); }
+.hero__gap {
+  margin: .9rem 0 0; font-size: .82rem; color: var(--ink-3);
+  flex: 1 1 100%; padding-top: .7rem; border-top: 1px solid var(--line);
+}
+.hero__gap b { color: var(--ink); font-family: var(--num); font-weight: 600; }
+
+/* ---- income modes and 5-year bands ------------------------------------- */
+
+.seg--wrap { display: flex; flex-wrap: wrap; width: 100%; margin-bottom: .85rem; }
+.seg--wrap button { flex: 1 1 auto; text-align: center; }
+
+.bands { display: grid; gap: .55rem; }
+.band { display: grid; grid-template-columns: 1fr auto; gap: .1rem .5rem; align-items: baseline; }
+.band label { font-size: .77rem; color: var(--ink-2); }
+.band .ctl__val { justify-self: end; }
+.band .ctl__val input { width: 7ch; }
+.band input[type="range"] { grid-column: 1 / -1; margin-top: .15rem; }
+
+/* ---- the facts bar ------------------------------------------------------ */
+
+.bar { align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.facts { display: flex; flex-wrap: wrap; gap: .3rem 1.4rem; margin: 0; }
+.facts div { min-width: 0; }
+.facts dt {
+  font-size: .6rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700;
+}
+.facts dd {
+  margin: 0; font-family: var(--num); font-size: .84rem;
+  font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap;
+}
+
+/* ---- the focus panel ---------------------------------------------------- */
+
+.focus { border-color: var(--c, var(--line)); }
+.focus__grid {
+  display: grid; gap: 1rem 1.6rem; margin-bottom: 1.4rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.fgroup h4 {
+  margin: 0 0 .45rem; font-size: .64rem; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+  padding-bottom: .35rem; border-bottom: 1px solid var(--line);
+}
+.fgroup dl { margin: 0; }
+.fgroup dl div {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: .8rem; padding: .2rem 0;
+}
+.fgroup dt { font-size: .78rem; color: var(--ink-3); min-width: 0; }
+.fgroup dd {
+  margin: 0; font-family: var(--num); font-size: .84rem;
+  font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap;
+}
+.fgroup dd.good { color: var(--good); }
+.fgroup dd.warn { color: var(--warn); }
+.fgroup dd.bad  { color: var(--bad); }
+#oppVerdict { margin-top: .8rem; font-size: .8rem; line-height: 1.6; color: var(--ink-3); }
+#oppVerdict b { color: var(--ink); font-family: var(--num); }
+
+/* ---- giving the dashboard the whole screen ----------------------------- */
+
+.panel__head { display: flex; align-items: flex-start; justify-content: space-between; gap: .6rem; }
+.panel__toggle {
+  font: inherit; font-size: .68rem; font-weight: 700; letter-spacing: .04em; cursor: pointer;
+  padding: .28rem .5rem; border-radius: 6px; white-space: nowrap;
+  border: 1px solid var(--line-2); background: var(--bg-4); color: var(--ink-3);
+}
+.panel__toggle:hover { background: var(--bg-5); color: var(--ink); }
+
+@media (min-width: 940px) {
+  body.panel-shut .app { grid-template-columns: 54px minmax(0, 1fr); }
+  body.panel-shut .panel > form,
+  body.panel-shut .panel__head > div { display: none; }
+  body.panel-shut .panel__head { padding: 1rem .5rem; justify-content: center; }
+  body.panel-shut .panel__toggle { padding: .35rem .45rem; }
+}
+
+/* ---- the three headline boxes ------------------------------------------ */
+
+.bigs {
+  display: grid; gap: 1px; margin: 1.1rem clamp(1rem, 3vw, 2rem) 0;
+  grid-template-columns: 1fr;
+  background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--r); overflow: hidden; position: relative;
+}
+@media (min-width: 700px) { .bigs { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1180px) { .bigs { grid-template-columns: repeat(4, 1fr); } }
+
+.big {
+  background: var(--bg-3); padding: 1.15rem 1.25rem 1.2rem;
+  border-top: 2px solid var(--c, var(--ink-4));
+}
+.big.cool { border-top-color: var(--info); }
+.big.warm { border-top-color: var(--warn); }
+.big__k {
+  margin: 0 0 .35rem; font-size: .66rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+}
+.big__v {
+  margin: 0; font-family: var(--num); font-size: clamp(1.7rem, 2.9vw, 2.3rem);
+  line-height: 1; letter-spacing: -.035em; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.big.cool .big__v { color: var(--info); }
+.big.warm .big__v { color: var(--warn); }
+.big__s { margin: .5rem 0 0; font-size: .755rem; line-height: 1.5; color: var(--ink-4); max-width: 42ch; }
+.bigs__who {
+  grid-column: 1 / -1; margin: 0; background: var(--bg-3);
+  padding: .45rem 1.25rem; font-size: .72rem; color: var(--ink-4);
+  border-top: 1px solid var(--line);
+}
+.bigs__who b { font-family: var(--num); font-weight: 700; }
+
+/* ---- breaks in employment ---------------------------------------------- */
+
+
+/* ---- the three choices, as a table with headings ----------------------- */
+
+.fgroup--wide { grid-column: 1 / -1; }
+.fgroup__lede {
+  margin: 0 0 .9rem; font-size: .8rem; line-height: 1.6;
+  color: var(--ink-3); max-width: 78ch;
+}
+.fgroup__lede b { color: var(--ink-2); font-weight: 600; }
+.choices { width: 100%; border-collapse: collapse; min-width: 460px; }
+.choices thead th {
+  text-align: left; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700; padding: 0 .55rem .35rem;
+  border-bottom: 1px solid var(--line); white-space: nowrap;
+}
+.choices thead th.n, .choices td.n { text-align: right; }
+.choices tbody th {
+  text-align: left; font-weight: 500; font-size: .82rem; color: var(--ink-2);
+  padding: .45rem .55rem; border-bottom: 1px solid var(--line);
+}
+.choices tbody th span { display: block; font-size: .7rem; color: var(--ink-4); font-weight: 400; }
+.choices td {
+  padding: .45rem .55rem; border-bottom: 1px solid var(--line);
+  font-family: var(--num); font-variant-numeric: tabular-nums;
+  font-size: .84rem; color: var(--ink-3); white-space: nowrap;
+}
+.choices td.lead { font-size: 1rem; color: var(--ink); }
+.choices tr.is-win th, .choices tr.is-win td.lead { color: var(--good); }
+.choices td.gap { color: var(--ink-4); font-size: .8rem; }
+.choices tr.is-win td.gap {
+  color: var(--good); font-weight: 700; font-family: var(--ui);
+  font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+}
+.choices tr.is-win th span { color: var(--good); opacity: .8; }
+
+/* ---- the recommendation ------------------------------------------------ */
+
+.rec {
+  border-radius: 8px; padding: .9rem 1.1rem; margin-bottom: 1.2rem;
+  background: var(--bg-4); border-left: 3px solid var(--ink-4);
+}
+.rec.is-empty { display: none; }
+.rec.is-good { border-left-color: var(--good); }
+.rec.is-warn { border-left-color: var(--warn); }
+.rec.is-even { border-left-color: var(--info); }
+.rec__k {
+  margin: 0 0 .2rem; font-size: .62rem; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--ink-4); font-weight: 700;
+}
+.rec__v { margin: 0; font-size: 1.08rem; font-weight: 600; color: var(--ink); line-height: 1.3; }
+.rec.is-good .rec__v { color: var(--good); }
+.rec.is-warn .rec__v { color: var(--warn); }
+.rec.is-even .rec__v { color: var(--info); }
+.rec__b { margin: .45rem 0 0; font-size: .82rem; line-height: 1.6; color: var(--ink-3); max-width: 82ch; }
+.rec__b b { color: var(--ink); font-family: var(--num); font-weight: 600; }
+
+.focus__sub {
+  margin: 2rem 0 .9rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
+  font-size: .64rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700;
+}
+
+/* ---- dragging the timeline --------------------------------------------- */
+
+#timelineChart svg { touch-action: pan-y; }
+.tl-handle { cursor: ew-resize; }
+.tl-handle:hover circle, .tl-handle:focus-visible circle { r: 6; }
+.tl-handle:focus-visible { outline: none; }
+.tl-handle:focus-visible line { stroke-width: 3; }
+
+.choices__now {
+  margin: .9rem 0 0; font-size: .8rem; line-height: 1.6; color: var(--ink-3);
+  padding-top: .8rem; border-top: 1px solid var(--line); max-width: 78ch;
+}
+.choices__now b { color: var(--ink); font-family: var(--num); font-weight: 600; }
+
+/* ---- the years, as a calendar ------------------------------------------ */
+
+.cal {
+  display: grid; gap: 4px;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+}
+.cal__yr {
+  border-radius: 6px; padding: .4rem .45rem .45rem; min-height: 46px;
+  background: var(--bg-4); border: 1px solid transparent;
+  display: flex; flex-direction: column; gap: .1rem; overflow: hidden;
+}
+.cal__yr b {
+  font-family: var(--num); font-size: .78rem; font-weight: 700;
+  color: var(--ink-3); letter-spacing: -.02em;
+}
+.cal__yr span { font-size: .62rem; line-height: 1.25; color: var(--ink-3); }
+.cal__yr.is-study { background: rgba(91,157,255,.12); }
+.cal__yr.is-study b { color: var(--info); }
+.cal__yr.is-repay { background: var(--bg-4); }
+
+/* An eventful year fills its whole box, so the shape of the run is visible
+   before a single word is read. */
+.cal__yr.is-event { grid-column: span 2; border-color: currentColor; }
+.cal__yr.is-event b, .cal__yr.is-event span { color: inherit; }
+.cal__yr.k-start   { color: var(--ink-2); background: var(--bg-5); }
+.cal__yr.k-peak,
+.cal__yr.k-turn    { color: var(--warn); background: rgba(245,165,36,.14); }
+.cal__yr.k-half    { color: var(--ink-2); background: var(--bg-5); }
+.cal__yr.k-cleared { color: var(--good); background: rgba(53,214,164,.14); }
+.cal__yr.k-written { color: var(--bad);  background: rgba(242,84,91,.14); }
+
+.cal__legend { display: flex; flex-wrap: wrap; gap: .3rem .9rem; margin: .9rem 0 0; }
+.cal__key { font-style: normal; font-size: .73rem; display: inline-flex; align-items: center; gap: .35rem; color: var(--ink-4); }
+.cal__key::before { content: ""; width: 11px; height: 11px; border-radius: 3px; background: currentColor; opacity: .5; }
+.cal__key.is-study { color: var(--info); }
+.cal__key.is-repay { color: var(--ink-3); }
+.cal__key.k-peak { color: var(--warn); }
+.cal__key.k-cleared { color: var(--good); }
+
+/* ---- drawing an income ------------------------------------------------- */
+
+.draw { margin-top: .5rem; }
+.draw svg { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; }
+.draw .dp { cursor: grab; }
+.draw .dp:hover { r: 6.5; }
+.draw .dp:active { cursor: grabbing; }
+
+/* ---- the timeline, as blocks you can grab ------------------------------ *
+ * Each block is a pane of coloured glass: almost no fill, a bright edge and
+ * a glow that leaks both ways, so overlapping years still read.           */
+.tl {
+  position: relative;
+  margin: .6rem 0 .5rem;
+  padding: 1.15rem .7rem .4rem;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.028), rgba(255,255,255,0)),
+    var(--bg-2);
+  border: 1px solid var(--line);
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+.tl.is-grabbed { cursor: grabbing; }
+.tl__scale { position: relative; height: 0; }
+.tl__tick {
+  position: absolute; top: -1rem; transform: translateX(-50%);
+  font-size: .64rem; letter-spacing: .02em; color: var(--ink-4);
+  font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+.tl__tick.is-first { left: 0 !important; transform: none; }
+.tl__tick.is-last  { left: auto !important; right: 0; transform: none; }
+.tl__lane { position: relative; height: 2rem; margin: 0 0 .3rem; }
+.tl__lane:last-child { height: 1.6rem; margin-bottom: 0; }
+
+.tl__blk {
+  position: absolute; top: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--k);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--k) 13%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--k) 22%, transparent),
+              0 0 14px -2px color-mix(in srgb, var(--k) 55%, transparent),
+              inset 0 0 18px -6px color-mix(in srgb, var(--k) 60%, transparent);
+  cursor: grab;
+  overflow: hidden;
+  z-index: 2;
+}
+/* The career runs to the edge of the track, so it lies behind everything
+   else — otherwise it covers the controls of whatever it starts next to. */
+.tl__blk.is-open { z-index: 1; }
+.tl__blk:hover { z-index: 3; }
+.tl.is-grabbed .tl__blk { cursor: grabbing; }
+.tl__blk:hover { background: color-mix(in srgb, var(--k) 20%, transparent); }
+.tl__blk.is-open {
+  border-right: 0;
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+  -webkit-mask-image: linear-gradient(90deg, #000 72%, transparent 100%);
+          mask-image: linear-gradient(90deg, #000 72%, transparent 100%);
+}
+.tl__blk.k-ug   { --k: var(--info); }
+.tl__blk.k-pg   { --k: #a78bfa; }
+.tl__blk.k-work { --k: var(--good); }
+.tl__blk.k-brk  { --k: var(--warn); }
+
+.tl__name {
+  font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--k);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--k) 60%, transparent);
+  white-space: nowrap; pointer-events: none; padding: 0 .55rem;
+}
+/* On a one-year block two full-width grips would meet in the middle and
+   leave nothing to take hold of, so they give way with the block. */
+.tl__grip {
+  position: absolute; top: 0; bottom: 0; width: min(.45rem, 22%);
+  cursor: ew-resize;
+}
+.tl__grip.is-l { left: 0; }
+.tl__grip.is-r { right: 0; }
+.tl__grip::after {
+  content: ""; position: absolute; top: 22%; bottom: 22%; left: 50%;
+  width: 2px; margin-left: -1px; border-radius: 2px;
+  background: var(--k); opacity: .55;
+}
+.tl__grip:hover::after { opacity: 1; box-shadow: 0 0 8px var(--k); }
+.tl__x {
+  position: absolute; top: 0; right: 0;
+  width: 1rem; height: 55%; line-height: 1;
+  display: grid; place-items: center;
+  border: 0; border-radius: 4px; background: none;
+  color: var(--k); opacity: 0; font-size: .8rem; cursor: pointer;
+}
+.tl__blk:hover .tl__x { opacity: .8; }
+.tl__x:hover { opacity: 1; background: color-mix(in srgb, var(--k) 25%, transparent); }
+.tl__blk:hover .tl__grip::after { opacity: .9; }
+.tl__empty {
+  margin: 0; padding-left: .1rem; font-size: .7rem; color: var(--ink-4);
+  line-height: 1.6rem;
+}
+.tlkey {
+  display: flex; flex-wrap: wrap; gap: .1rem .8rem;
+  margin: .1rem 0 .45rem; padding: 0; list-style: none;
+}
+.tlkey li {
+  display: flex; align-items: center; gap: .3rem;
+  font-size: .66rem; letter-spacing: .03em; color: var(--ink-4);
+}
+.tlkey li::before {
+  content: ""; width: .5rem; height: .5rem; border-radius: 2px;
+  border: 1px solid var(--k);
+  background: color-mix(in srgb, var(--k) 30%, transparent);
+  box-shadow: 0 0 6px -1px var(--k);
+}
+.tlkey .k-ug   { --k: var(--info); }
+.tlkey .k-pg   { --k: #a78bfa; }
+.tlkey .k-work { --k: var(--good); }
+.tlkey .k-brk  { --k: var(--warn); }
+
+</style>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the results</a>
+
+<div class="app">
+
+  <!-- ==================================================================== -->
+  <!-- CONTROLS                                                             -->
+  <!-- ==================================================================== -->
+  <aside class="panel" aria-label="Controls">
+
+    <header class="panel__head">
+      <div>
+        <p class="brand">UK&nbsp;student&nbsp;finance</p>
+        <h1>Repayment model</h1>
+      </div>
+      <button type="button" id="panelToggle" class="panel__toggle" aria-expanded="true">← Hide controls</button>
+    </header>
+
+    <form id="form" novalidate>
+
+      <!-- ---- scenarios ---- -->
+      <section class="grp grp--scen">
+        <div class="grp__head"><h2>Compare</h2></div>
+        <div class="scens" id="scenTabs" role="tablist" aria-label="Scenarios"></div>
+        <label class="check"><input type="checkbox" id="showNoLoan" checked /> <span class="noloan-sw">Compare with paying upfront</span></label>
+        <div class="btnrow"><button type="button" class="btn" id="resetAll">Start over</button></div>
+        <p class="note">Everything below edits the scenario you have selected. All of them stay on the charts.</p>
+      </section>
+
+      <!-- ---- income profile ---- -->
+      <section class="grp">
+        <div class="grp__head">
+          <h2>Income <b class="who" id="whoIncome">A</b></h2>
+        </div>
+        <p class="note note--lede" id="incomeLede"></p>
+
+        <div class="seg seg--wrap" role="tablist" aria-label="How to state the income">
+          <button type="button" role="tab" id="tab-career" aria-controls="pane-career" aria-selected="true" data-mode="career">Profession</button>
+          <button type="button" role="tab" id="tab-growth" aria-controls="pane-growth" aria-selected="false" data-mode="growth">Start + growth</button>
+          <button type="button" role="tab" id="tab-bands"  aria-controls="pane-bands"  aria-selected="false" data-mode="bands">Draw it</button>
+          <button type="button" role="tab" id="tab-manual" aria-controls="pane-manual" aria-selected="false" data-mode="manual">Year by year</button>
+        </div>
+
+        <div class="pane" id="pane-career" role="tabpanel" aria-labelledby="tab-career">
+          <div class="picks" id="careerCards" role="radiogroup" aria-label="Profession"></div>
+          <select id="career" class="sr-only" tabindex="-1" aria-hidden="true"></select>
+          <p class="note" id="careerNote"></p>
+        </div>
+
+        <div class="pane" id="pane-growth" role="tabpanel" aria-labelledby="tab-growth" hidden>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="startSalary">Starting salary</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="startSalary" min="0" max="1000000" step="500" value="30000" data-slider="10000,250000,1000" /></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="salaryGrowth">Grows a year</label>
+              <span class="ctl__val"><input type="number" id="salaryGrowth" min="-5" max="20" step="0.1" value="4" data-slider="0,12,0.1" /><i>%</i></span>
+            </div>
+            <p class="note">Cash, not real — above inflation is a rise, at inflation you stand still.</p>
+          </div>
+        </div>
+
+        <div class="pane" id="pane-bands" role="tabpanel" aria-labelledby="tab-bands" hidden>
+          <p class="note">Salary against year of career, in today's money — inflation is added on top.
+            Click the chart to place a point, drag it to move, click it twice to remove.</p>
+          <div id="drawChart" class="draw"></div>
+          <p class="note" id="drawNote"></p>
+          <div class="btnrow"><button type="button" class="btn" id="drawReset">Reset the curve</button></div>
+        </div>
+
+        <div class="pane" id="pane-manual" role="tabpanel" aria-labelledby="tab-manual" hidden>
+          <p class="note">Every year, yours to set. £0 for a career break.</p>
+          <table class="years">
+            <thead><tr><th scope="col">Year</th><th scope="col">Age</th><th scope="col">Salary</th></tr></thead>
+            <tbody id="salaryRows"></tbody>
+          </table>
+          <div class="btnrow">
+            <button type="button" class="btn" id="addYears">+5 years</button>
+            <button type="button" class="btn" id="resetSalaries">Reset</button>
+          </div>
+        </div>
+
+        <p class="readout" id="predictSummary"></p>
+      </section>
+
+      <!-- ---- timeline ---- -->
+      <section class="grp">
+        <div class="grp__head">
+          <h2>Timeline</h2>
+          <div class="seg" role="tablist" aria-label="How to describe the loan">
+            <button type="button" role="tab" id="tab-course" aria-controls="pane-course" aria-selected="true" data-tab="course">Course</button>
+            <button type="button" role="tab" id="tab-balance" aria-controls="pane-balance" aria-selected="false" data-tab="balance">Balance</button>
+          </div>
+        </div>
+
+        <div class="pane" id="pane-course" role="tabpanel" aria-labelledby="tab-course">
+          <p class="note">Grab a block to move it, or its edge to stretch it. Your career has no end date.</p>
+
+          <div class="tl" id="tlTrack">
+            <div class="tl__scale" id="tlScale"></div>
+            <div class="tl__lane" id="tlLaneA"></div>
+            <div class="tl__lane" id="tlLaneB"></div>
+          </div>
+          <ul class="tlkey">
+            <li class="k-ug">Undergrad</li>
+            <li class="k-pg">Postgrad</li>
+            <li class="k-work">Career</li>
+            <li class="k-brk">Break</li>
+          </ul>
+          <div class="btnrow">
+            <button type="button" class="btn" id="tlAddBreak">+ Break</button>
+            <button type="button" class="btn" id="tlAddPg">+ Postgrad</button>
+          </div>
+          <p class="note" id="tlNote"></p>
+
+          <input type="hidden" id="startYear" value="2026" />
+          <input type="hidden" id="courseYears" value="3" />
+          <input type="hidden" id="pgStartYear" value="2029" />
+          <input type="hidden" id="pgYears" value="1" />
+          <input type="hidden" id="workStartYear" value="2029" />
+          <input type="checkbox" id="hasPgl" class="sr-only" />
+
+          <div id="pglRow" hidden>
+            <div class="ctl">
+              <div class="ctl__top">
+                <label for="pglBalance">Postgraduate borrowed</label>
+                <span class="ctl__val"><i>£</i><input type="number" id="pglBalance" min="0" max="200000" step="100" value="12471" data-slider="0,60000,250" /></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="tuition">Tuition a year</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="tuition" min="0" max="60000" step="10" value="9790" data-slider="0,20000,50" /></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="maintenance">Maintenance a year</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="maintenance" min="0" max="30000" step="10" value="10830" data-slider="0,16000,10" /></span>
+            </div>
+            <select id="living"></select>
+          </div>
+
+          <p class="readout" id="borrowSummary"></p>
+          <p class="note" id="startHint"></p>
+          <p class="note" id="workHint"></p>
+        </div>
+
+        <div class="pane" id="pane-balance" role="tabpanel" aria-labelledby="tab-balance" hidden>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="openingBalance">Owed today</label>
+              <span class="ctl__val"><i>£</i><input type="number" id="openingBalance" min="0" max="1000000" step="100" value="52000" data-slider="0,250000,1000" /></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="repayStartYear">First April due</label>
+              <span class="ctl__val"><input type="number" id="repayStartYear" min="2000" max="2050" step="1" value="2026" data-slider="2010,2040,1" /></span>
+            </div>
+            <p class="note">What the write-off clock counts from.</p>
+          </div>
+        </div>
+
+        <div class="ctl">
+          <div class="ctl__top"><label>Plan</label></div>
+          <select id="plan"></select>
+          <p class="note" id="planBlurb"></p>
+        </div>
+      </section>
+
+      <!-- ---- extras ---- -->
+      <section class="grp">
+        <div class="grp__head"><h2>Also</h2></div>
+        <div class="ctl">
+          <div class="ctl__top">
+            <label for="overpay">Overpay a month</label>
+            <span class="ctl__val"><i>£</i><input type="number" id="overpay" min="0" max="20000" step="10" value="0" data-slider="0,2000,25" /></span>
+          </div>
+          <p class="note">Test it first. It often buys nothing.</p>
+        </div>
+        <div class="ctl">
+          <div class="ctl__top">
+            <label for="birthYear">Born <span class="opt">optional</span></label>
+            <span class="ctl__val"><input type="number" id="birthYear" min="1940" max="2020" step="1" placeholder="2008" /></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---- savings ---- -->
+      <section class="grp">
+        <div class="grp__head"><h2>Savings account</h2></div>
+        <div class="ctl">
+          <div class="ctl__top">
+            <label for="savings">Return a year</label>
+            <span class="ctl__val"><input type="number" id="savings" min="0" max="20" step="0.1" value="4.5" data-slider="0,12,0.1" /><i>%</i></span>
+          </div>
+          <p class="note">What your money would earn if you kept it rather than handing it over.
+            Drives <em>growth given up</em> and the repay-or-save comparison.</p>
+        </div>
+        <p class="readout" id="savingsReadout"></p>
+      </section>
+
+      <!-- ---- assumptions ---- -->
+      <details class="grp grp--fold">
+        <summary><h2>Assumptions</h2><span>the unknowables</span></summary>
+        <div class="fold">
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="rpi">RPI</label>
+              <span class="ctl__val"><input type="number" id="rpi" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><i>%</i></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="thresholdGrowth">Thresholds rise</label>
+              <span class="ctl__val"><input type="number" id="thresholdGrowth" min="0" max="20" step="0.1" value="3.6" data-slider="0,8,0.1" /><i>%</i></span>
+            </div>
+            <p class="note">Below inflation, because that is what has happened. Moves the answer more than anything else here.</p>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="inflation">Inflation</label>
+              <span class="ctl__val"><input type="number" id="inflation" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><i>%</i></span>
+            </div>
+          </div>
+          <div class="ctl">
+            <div class="ctl__top">
+              <label for="bankBase">Base rate</label>
+              <span class="ctl__val"><input type="number" id="bankBase" min="0" max="20" step="0.1" value="3.75" data-slider="0,10,0.25" /><i>%</i></span>
+            </div>
+            <p class="note">Caps Plan 1 and Plan 4 at base + 1%.</p>
+          </div>
+          <label class="check"><input type="checkbox" id="useCap" checked /> <span>Apply the announced 6% cap</span></label>
+        </div>
+      </details>
+
+    </form>
+  </aside>
+
+  <!-- ==================================================================== -->
+  <!-- RESULTS                                                              -->
+  <!-- ==================================================================== -->
+  <main class="main" id="main">
+
+    <header class="hero" aria-live="polite">
+      <div class="hero__lead">
+        <p class="hero__label">Handed over, over a lifetime</p>
+        <div class="hero__row" id="heroRow"></div>
+      </div>
+      <p class="hero__gap" id="heroGap"></p>
+    </header>
+
+    <section class="bigs" id="bigs" aria-label="Headline totals for the selected profile"></section>
+
+    <div class="bar">
+      <dl class="facts" id="facts"></dl>
+      <div class="seg seg--sm" role="group" aria-label="Money basis">
+        <button type="button" class="on" data-basis="cash">Cash</button>
+        <button type="button" data-basis="real">Today's money</button>
+      </div>
+    </div>
+
+    <section class="cards">
+
+      <figure class="card card--wide">
+        <figcaption><h3>The income profiles</h3>
+          <p>Every profile over time, each in its own colour, against the repayment threshold. You pay 9% of the gap above it.</p></figcaption>
+        <div id="salaryChart" class="viz"></div>
+        <p class="key" id="salaryKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>What you still owe</h3>
+          <p>The debt tracker. Each line ends where that loan does — cleared, or written off.</p></figcaption>
+        <div id="chart" class="viz"></div>
+        <p class="key" id="chartKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>What you have handed over</h3>
+          <p>Running total until the repayments stop. The grey line is the other life — fees paid in cash during the course, then nothing.</p></figcaption>
+        <div id="costChart" class="viz"></div>
+        <p class="key" id="costKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>Side by side</h3>
+          <p>Lifetime cost of each profile, against finding the fees in cash instead.</p></figcaption>
+        <div id="barsChart" class="viz"></div>
+        <p class="key" id="barsKey"></p>
+      </figure>
+
+      <figure class="card">
+        <figcaption><h3>Out of your pay, monthly</h3>
+          <p>The figure you would notice on a payslip.</p></figcaption>
+        <div id="monthlyChart" class="viz"></div>
+        <p class="key" id="monthlyKey"></p>
+      </figure>
+
+      <figure class="card">
+        <figcaption><h3>Interest rate charged</h3>
+          <p id="rateNote"></p></figcaption>
+        <div id="rateChart" class="viz"></div>
+        <p class="key" id="rateKey"></p>
+      </figure>
+
+      <figure class="card card--wide focus" id="focusCard">
+        <figcaption><h3>Profile <b class="who" id="whoFocus">A</b> — the whole picture</h3>
+          <p>Every number for the selected profile, and what the same money would have done in a savings account.</p></figcaption>
+        <div class="rec is-empty" id="recBox"></div>
+        <div class="focus__grid" id="focusGrid"></div>
+        <div id="oppChart" class="viz"></div>
+        <p class="key" id="oppKey"></p>
+        <p class="note" id="oppVerdict"></p>
+
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>Where it ends up</h3>
+          <p>For the selected profile. Both bars are the same length — the money has to go somewhere.</p></figcaption>
+        <div id="flowChart" class="viz"></div>
+        <p class="key" id="flowKey"></p>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>What happens, and when</h3>
+          <p>From the first instalment to the year it ends, marked where something changes.</p></figcaption>
+        <div id="milestones"></div>
+      </figure>
+
+      <figure class="card card--wide">
+        <figcaption><h3>How much of this is guesswork</h3>
+          <p>Each bar is the same scenario re-run with one assumption moved low and high. Longer bar, bigger guess.</p></figcaption>
+        <div id="sensChart" class="viz"></div>
+        <p class="note" id="sensNote"></p>
+      </figure>
+
+    </section>
+
+    <section class="card card--flat" aria-labelledby="h-log">
+      <div class="card__bar">
+        <h3 id="h-log">The log <b class="who" id="whoLog">A</b></h3>
+        <div class="btnrow">
+          <button type="button" class="btn" id="toggleZeros">Hide empty years</button>
+          <button type="button" class="btn" id="downloadCsv">CSV</button>
+        </div>
+      </div>
+      <p class="note">Select a year to open its twelve months.</p>
+      <div class="scroll">
+        <table class="log">
+          <thead>
+            <tr>
+              <th scope="col">Tax year</th>
+              <th scope="col" class="n">Age</th>
+              <th scope="col" class="n">Salary</th>
+              <th scope="col" class="n">Threshold</th>
+              <th scope="col" class="n">Monthly</th>
+              <th scope="col" class="n">Paid</th>
+              <th scope="col" class="n">Rate</th>
+              <th scope="col" class="n">Interest</th>
+              <th scope="col" class="n">Paid to date</th>
+              <th scope="col" class="n">Balance</th>
+            </tr>
+          </thead>
+          <tbody id="logRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card card--flat notes" aria-labelledby="h-rules">
+      <h3 id="h-rules">The rules this follows</h3>
+      <div class="scroll">
+        <table class="rules">
+          <thead><tr><th scope="col">Plan</th><th scope="col">Who</th><th scope="col" class="n">Threshold</th><th scope="col" class="n">Rate</th><th scope="col">Interest</th><th scope="col" class="n">Written off</th></tr></thead>
+          <tbody id="rulesRows"></tbody>
+        </table>
+      </div>
+      <ul>
+        <li><b>Deductions look at the month, not the year.</b> 9% of whatever that month's gross pay
+          exceeds a twelfth of the annual threshold, rounded down to a whole pound.</li>
+        <li><b>Interest starts with the first instalment</b>, in the September the course begins — not
+          on graduation. That is why the balance on the first April exceeds what was borrowed.</li>
+        <li><b>Repayment begins the April after the course ends</b>, and the write-off clock counts
+          from that April.</li>
+        <li><b>The write-off is unconditional.</b> Whatever is left on the anniversary goes, however
+          large. For most Plan 5 borrowers that, not a final payment, is how the loan ends.</li>
+        <li><b>Interest is charged monthly here</b>, at a twelfth of the annual rate. The Student Loans
+          Company charges it daily; over forty years that is a rounding error beside RPI.</li>
+        <li><b>An undergraduate plan and a postgraduate loan run side by side</b>, each against its own
+          threshold — 9% and 6%, so 15% where both bite.</li>
+      </ul>
+      <p>
+        Nothing here is a forecast. A forty-year projection turns entirely on RPI, on how fast the
+        thresholds are uprated and on a salary nobody can know — and governments have changed all
+        three, retrospectively, more than once. For your own balance and plan type, sign in to your
+        Student Loans Company account; for the rules as they stand, see
+        <a href="https://www.gov.uk/repaying-your-student-loan" rel="noopener">gov.uk/repaying-your-student-loan</a>.
+        2026/27 thresholds and the rates announced for 1 September 2026 to 31 August 2027. Not financial advice.
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<script>
+/* ============================================================================
+   UK STUDENT LOAN REPAYMENT ENGINE
+   ----------------------------------------------------------------------------
+   A pure simulation: rules and circumstances in, a month-by-month ledger out.
+   No DOM, no globals beyond the single export, so it runs in the browser and
+   under `node` alike (see test/engine.test.js).
+
+   Every figure that the government changes each April lives in RULES or in the
+   `assumptions` block of a scenario, never buried in the arithmetic.
+   ========================================================================== */
+
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory();
+  else root.LoanEngine = factory();
+})(typeof self !== "undefined" ? self : this, function () {
+  "use strict";
+
+  /* ---------------------------------------------------------------------- *
+   * THE RULES
+   *
+   * Thresholds are the 2026/27 figures, which apply from 6 April 2026.
+   * Interest is expressed as a recipe over the assumptions (RPI, the Bank
+   * base rate) rather than as a number, because that is how the law states
+   * it — the number changes every September.
+   * -------------------------------------------------------------------- */
+
+  var BASE_TAX_YEAR = 2026; // the tax year beginning 6 April 2026
+
+  var RULES = {
+    plan1: {
+      label: "Plan 1",
+      blurb: "England or Wales, course started before 1 September 2012; or Northern Ireland.",
+      rate: 0.09,
+      threshold: 26900,
+      // Frozen until April of this year (exclusive). null = uprated every year.
+      thresholdFrozenUntil: null,
+      writeOffYears: 25,
+      writeOffNote: "25 years after the April you were first due to repay.",
+      interest: "lowerOfRpiAndBase",
+      studyInterest: "lowerOfRpiAndBase"
+    },
+    plan2: {
+      label: "Plan 2",
+      blurb: "England or Wales, course started between 1 September 2012 and 31 July 2023.",
+      rate: 0.09,
+      threshold: 29385,
+      thresholdFrozenUntil: 2030, // frozen April 2027 → April 2030
+      upperThreshold: 49130,      // top of the interest sliding scale
+      writeOffYears: 30,
+      writeOffNote: "30 years after the April you were first due to repay.",
+      interest: "slidingScale",
+      studyInterest: "rpiPlus3"
+    },
+    plan4: {
+      label: "Plan 4",
+      blurb: "Scotland (SAAS).",
+      rate: 0.09,
+      threshold: 33795,
+      thresholdFrozenUntil: null,
+      writeOffYears: 30,
+      writeOffNote: "30 years after the April you were first due to repay.",
+      interest: "lowerOfRpiAndBase",
+      studyInterest: "lowerOfRpiAndBase"
+    },
+    plan5: {
+      label: "Plan 5",
+      blurb: "England, course started on or after 1 August 2023. Most of today's undergraduates.",
+      rate: 0.09,
+      threshold: 25000,
+      thresholdFrozenUntil: 2027, // frozen until April 2027, then uprated
+      writeOffYears: 40,
+      writeOffNote: "40 years after the April you were first due to repay.",
+      interest: "rpi",
+      studyInterest: "rpi"
+    },
+    pgl: {
+      label: "Postgraduate Loan",
+      blurb: "Master's or doctoral loan. Repaid alongside an undergraduate plan, not instead of it.",
+      rate: 0.06,
+      threshold: 21000,
+      // Frozen since postgraduate loans began in 2016 and never once uprated,
+      // with no end date announced — so it is modelled as staying put, unlike
+      // the Plan 2 and Plan 5 freezes which have dates attached.
+      thresholdFrozenUntil: Infinity,
+      writeOffYears: 30,
+      writeOffNote: "30 years after the April you were first due to repay.",
+      interest: "rpiPlus3",
+      studyInterest: "rpiPlus3"
+    }
+  };
+
+  var DEFAULT_ASSUMPTIONS = {
+    rpi: 0.041,               // March 2026 RPI, sets rates from 1 Sep 2026
+    bankBase: 0.0375,         // Bank of England base rate
+    interestCap: 0.06,        // "prevailing market rate" cap, in force to Aug 2027
+    interestCapUntil: 2027,   // the last tax year that cap has been announced for
+    thresholdGrowth: 0.036,   // how fast thresholds rise once unfrozen
+    salaryGrowth: 0.03,       // used only to extend a salary line past its last entry
+    inflation: 0.041,         // used to restate the ledger in today's money
+    savings: 0.045            // what the money would earn if you kept it instead
+  };
+
+  /* ---------------------------------------------------------------------- *
+   * SMALL HELPERS
+   * -------------------------------------------------------------------- */
+
+  // An absolute month index, so arithmetic across year boundaries is trivial.
+  function ym(year, month) { return year * 12 + (month - 1); }
+  function yearOf(i) { return Math.floor(i / 12); }
+  function monthOf(i) { return (i % 12) + 1; }
+
+  // The UK tax year runs 6 April → 5 April. The tax year "2030/31" begins in
+  // April 2030, so any month before April belongs to the previous one.
+  function taxYearOf(i) {
+    return monthOf(i) >= 4 ? yearOf(i) : yearOf(i) - 1;
+  }
+  function taxYearLabel(y) {
+    return y + "/" + String((y + 1) % 100).padStart(2, "0");
+  }
+
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function clamp(n, lo, hi) { return n < lo ? lo : n > hi ? hi : n; }
+
+  /* ---------------------------------------------------------------------- *
+   * THRESHOLDS
+   *
+   * The published figure applies to 2026/27. Earlier years are not modelled
+   * (nobody is simulating the past); later years are uprated once any freeze
+   * has expired.
+   * -------------------------------------------------------------------- */
+
+  function upratedThreshold(base, plan, taxYear, growth) {
+    if (taxYear <= BASE_TAX_YEAR) return base;
+    var frozenUntil = plan.thresholdFrozenUntil;
+    var risenYears;
+    if (frozenUntil == null) {
+      risenYears = taxYear - BASE_TAX_YEAR;          // uprated every April
+    } else if (taxYear < frozenUntil) {
+      risenYears = 0;                                // still inside the freeze
+    } else {
+      risenYears = taxYear - frozenUntil + 1;        // the freeze has expired
+    }
+    return base * Math.pow(1 + growth, Math.max(0, risenYears));
+  }
+
+  function thresholdFor(planKey, taxYear, a) {
+    var plan = RULES[planKey];
+    return upratedThreshold(plan.threshold, plan, taxYear, a.thresholdGrowth);
+  }
+
+  function upperThresholdFor(planKey, taxYear, a) {
+    var plan = RULES[planKey];
+    if (!plan.upperThreshold) return null;
+    return upratedThreshold(plan.upperThreshold, plan, taxYear, a.thresholdGrowth);
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * INTEREST
+   *
+   * `recipe` is the string named in RULES. Income only matters for Plan 2's
+   * sliding scale, and only once you have left the course.
+   * -------------------------------------------------------------------- */
+
+  function interestRate(recipe, opts) {
+    var a = opts.assumptions;
+    var r;
+    switch (recipe) {
+      case "rpi":
+        r = a.rpi;
+        break;
+      case "rpiPlus3":
+        r = a.rpi + 0.03;
+        break;
+      case "lowerOfRpiAndBase":
+        r = Math.min(a.rpi, a.bankBase + 0.01);
+        break;
+      case "slidingScale": {
+        var lo = opts.threshold, hi = opts.upperThreshold;
+        var frac = hi > lo ? clamp((opts.income - lo) / (hi - lo), 0, 1) : 0;
+        r = a.rpi + 0.03 * frac;
+        break;
+      }
+      default:
+        r = a.rpi;
+    }
+    // The "prevailing market rate" cap is announced a year at a time. Past
+    // the year it has been announced for, the statutory rate stands.
+    var capLives = a.interestCapUntil == null || opts.taxYear == null
+      || opts.taxYear <= a.interestCapUntil;
+    if (a.interestCap != null && capLives) r = Math.min(r, a.interestCap);
+    return Math.max(r, 0);
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * WHAT IS DEDUCTED FROM A MONTH'S PAY
+   *
+   * PAYE looks at the pay period in isolation, not the year: 9% of whatever
+   * that month's gross pay exceeds a twelfth of the annual threshold, rounded
+   * down to a whole pound.
+   * -------------------------------------------------------------------- */
+
+  function monthlyDeduction(annualSalary, annualThreshold, rate) {
+    var pay = annualSalary / 12;
+    var thr = annualThreshold / 12;
+    if (pay <= thr) return 0;
+    return Math.floor((pay - thr) * rate);
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * BORROWING
+   *
+   * Student Finance pays in three instalments an academic year: tuition goes
+   * to the university 25% / 25% / 50%, maintenance reaches the student in
+   * three roughly equal parts. Interest runs from the first instalment, which
+   * is why a three-year course already owes more than it borrowed on
+   * graduation day.
+   * -------------------------------------------------------------------- */
+
+  function drawdownSchedule(course) {
+    var rows = [];
+    var tuitionSplit = [0.25, 0.25, 0.5];
+    var maintSplit = [1 / 3, 1 / 3, 1 / 3];
+    for (var i = 0; i < course.years; i++) {
+      var acadStart = course.startYear + i;
+      var months = [ym(acadStart, 9), ym(acadStart + 1, 1), ym(acadStart + 1, 4)];
+      var tuition = course.tuitionPerYear[i] != null ? course.tuitionPerYear[i] : course.tuitionPerYear;
+      var maint = course.maintenancePerYear[i] != null ? course.maintenancePerYear[i] : course.maintenancePerYear;
+      for (var t = 0; t < 3; t++) {
+        var amount = (Number(tuition) || 0) * tuitionSplit[t] + (Number(maint) || 0) * maintSplit[t];
+        if (amount > 0) rows.push({ month: months[t], amount: amount, academicYear: i + 1 });
+      }
+    }
+    return rows;
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * THE SALARY LINE
+   *
+   * `salaries` is a sparse map of tax year → gross annual salary. Years before
+   * the first entry take the first value; years after the last one grow at the
+   * assumed rate, so a ledger that runs to a 40-year write-off never runs out
+   * of income to test against.
+   * -------------------------------------------------------------------- */
+
+  function salaryLine(salaries, a) {
+    var years = Object.keys(salaries).map(Number).sort(function (x, y) { return x - y; });
+    if (!years.length) return function () { return 0; };
+    var first = years[0], last = years[years.length - 1];
+    return function (taxYear) {
+      if (taxYear <= first) return Number(salaries[first]) || 0;
+      if (salaries[taxYear] != null) return Number(salaries[taxYear]) || 0;
+      if (taxYear > last) {
+        return (Number(salaries[last]) || 0) * Math.pow(1 + a.salaryGrowth, taxYear - last);
+      }
+      // A gap between two given years: hold the last stated figure.
+      for (var i = years.length - 1; i >= 0; i--) {
+        if (years[i] < taxYear) return Number(salaries[years[i]]) || 0;
+      }
+      return 0;
+    };
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * ONE LOAN, MONTH BY MONTH
+   * -------------------------------------------------------------------- */
+
+  function simulateLoan(loan, ctx) {
+    var plan = RULES[loan.plan];
+    if (!plan) throw new Error("Unknown plan: " + loan.plan);
+
+    var a = ctx.assumptions;
+    var salaryAt = ctx.salaryAt;
+
+    // When does the first instalment land, and when do repayments begin?
+    var draws = loan.openingBalance != null ? [] : drawdownSchedule(loan.course);
+    // A course with no tuition and no maintenance draws nothing down; the
+    // ledger then simply starts at the first April, with nothing in it.
+    var firstMonth = (loan.openingBalance != null || !draws.length)
+      ? ym(loan.repaymentStartYear, 4)
+      : draws[0].month;
+    var repayStart = ym(loan.repaymentStartYear, 4);
+    var writeOffAt = ym(loan.repaymentStartYear + plan.writeOffYears, 4);
+
+    var balance = loan.openingBalance != null ? Number(loan.openingBalance) : 0;
+    var borrowed = balance;
+    var repaid = 0, interestTotal = 0, voluntaryTotal = 0;
+
+    var months = [];
+    var i = firstMonth;
+    var cleared = null, writtenOff = null;
+    var balanceAtRepayStart = null;
+
+    // Repayments run from that first April up to, and including, the March
+    // before the write-off anniversary — exactly `writeOffYears` years.
+    var lastMonth = writeOffAt - 1;
+
+    while (i <= lastMonth) {
+      var tYear = taxYearOf(i);
+      var inRepayment = i >= repayStart;
+      var draw = 0;
+
+      for (var d = 0; d < draws.length; d++) {
+        if (draws[d].month === i) { draw += draws[d].amount; }
+      }
+      if (draw > 0) { balance += draw; borrowed += draw; }
+
+      if (i === repayStart) balanceAtRepayStart = balance;
+
+      var salary = inRepayment ? salaryAt(tYear) : 0;
+      var threshold = thresholdFor(loan.plan, tYear, a);
+      var upper = upperThresholdFor(loan.plan, tYear, a);
+
+      var recipe = inRepayment ? plan.interest : plan.studyInterest;
+      var rate = interestRate(recipe, {
+        assumptions: a,
+        income: salary,
+        threshold: threshold,
+        upperThreshold: upper,
+        taxYear: tYear
+      });
+
+      var interest = balance > 0 ? balance * (rate / 12) : 0;
+      balance += interest;
+      interestTotal += interest;
+
+      var payment = 0, voluntary = 0;
+      if (inRepayment && balance > 0) {
+        payment = monthlyDeduction(salary, threshold, plan.rate);
+        if (loan.share != null) payment = payment * loan.share;
+        payment = Math.min(payment, balance);
+        balance -= payment;
+        repaid += payment;
+
+        if (balance > 0 && ctx.overpayment) {
+          voluntary = Math.min(ctx.overpayment.monthly || 0, balance);
+          var lump = (ctx.overpayment.lumpSums || []).filter(function (l) {
+            return ym(Number(l.year), Number(l.month || 4)) === i;
+          });
+          for (var L = 0; L < lump.length; L++) voluntary += Number(lump[L].amount) || 0;
+          voluntary = Math.min(voluntary, balance);
+          balance -= voluntary;
+          repaid += voluntary;
+          voluntaryTotal += voluntary;
+        }
+      }
+
+      months.push({
+        month: i,
+        year: yearOf(i),
+        monthNo: monthOf(i),
+        taxYear: tYear,
+        phase: inRepayment ? "repaying" : "studying",
+        drawdown: draw,
+        salary: salary,
+        threshold: threshold,
+        rate: rate,
+        interest: interest,
+        payment: payment,
+        voluntary: voluntary,
+        balance: balance
+      });
+
+      if (inRepayment && balance <= 0.005 && cleared === null) {
+        balance = 0;
+        cleared = i;
+        break;
+      }
+      i++;
+    }
+
+    if (cleared === null) {
+      writtenOff = balance;
+      balance = 0;
+    }
+
+    return summarise({
+      key: loan.key || loan.plan,
+      plan: loan.plan,
+      planLabel: plan.label,
+      months: months,
+      borrowed: borrowed,
+      repaid: repaid,
+      interest: interestTotal,
+      voluntary: voluntaryTotal,
+      writtenOff: writtenOff,
+      cleared: cleared,
+      repayStart: repayStart,
+      writeOffAt: writeOffAt,
+      balanceAtRepayStart: balanceAtRepayStart == null ? borrowed : balanceAtRepayStart,
+      assumptions: a
+    });
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * THE LOG
+   *
+   * Months roll up into tax years, because that is the unit anyone actually
+   * thinks in — and every row carries the running totals, so the log answers
+   * "how much have I paid off by then?" at a glance.
+   * -------------------------------------------------------------------- */
+
+  function summarise(r) {
+    var years = [];
+    var byYear = {};
+    var order = [];
+
+    r.months.forEach(function (m) {
+      if (!byYear[m.taxYear]) {
+        byYear[m.taxYear] = {
+          taxYear: m.taxYear,
+          label: taxYearLabel(m.taxYear),
+          phase: m.phase,
+          openingBalance: m.balance - m.interest + m.payment + m.voluntary - m.drawdown,
+          salary: m.salary,
+          threshold: m.threshold,
+          borrowed: 0, interest: 0, repaid: 0, voluntary: 0,
+          rateHigh: m.rate, rateLow: m.rate,
+          months: 0
+        };
+        order.push(m.taxYear);
+      }
+      var y = byYear[m.taxYear];
+      y.borrowed += m.drawdown;
+      y.interest += m.interest;
+      y.repaid += m.payment;
+      y.voluntary += m.voluntary;
+      y.closingBalance = m.balance;
+      y.salary = Math.max(y.salary, m.salary);
+      y.threshold = m.threshold;
+      y.rateHigh = Math.max(y.rateHigh, m.rate);
+      y.rateLow = Math.min(y.rateLow, m.rate);
+      y.months++;
+      if (m.phase === "repaying") y.phase = "repaying";
+    });
+
+    var cumRepaid = 0, cumInterest = 0, cumBorrowed = 0;
+    order.forEach(function (k) {
+      var y = byYear[k];
+      cumBorrowed += y.borrowed;
+      cumInterest += y.interest;
+      cumRepaid += y.repaid + y.voluntary;
+      y.cumBorrowed = cumBorrowed;
+      y.cumInterest = cumInterest;
+      y.cumRepaid = cumRepaid;
+      y.monthlyRepayment = y.phase === "repaying" && y.months ? (y.repaid / y.months) : 0;
+      y.interestOutranPayments = y.phase === "repaying" && y.interest > (y.repaid + y.voluntary);
+      years.push(y);
+    });
+
+    // Restate everything in today's money, so a 40-year projection means
+    // something. Deflated to the tax year the simulation opens in.
+    var baseYear = years.length ? years[0].taxYear : BASE_TAX_YEAR;
+    var infl = r.assumptions.inflation;
+    years.forEach(function (y) {
+      var f = Math.pow(1 + infl, -(y.taxYear - baseYear));
+      y.deflator = f;
+      y.realClosingBalance = y.closingBalance * f;
+      y.realRepaid = (y.repaid + y.voluntary) * f;
+      y.realSalary = y.salary * f;
+    });
+
+    var totalRepaid = r.repaid;
+    var realRepaid = years.reduce(function (s, y) { return s + y.realRepaid; }, 0);
+
+    r.years = years;
+    r.totalRepaid = totalRepaid;
+    r.totalRealRepaid = realRepaid;
+    r.totalInterest = r.interest;
+    r.perPoundBorrowed = r.borrowed > 0 ? totalRepaid / r.borrowed : 0;
+    r.clearedLabel = r.cleared != null ? taxYearLabel(taxYearOf(r.cleared)) : null;
+    r.clearedMonth = r.cleared;
+    r.writeOffLabel = taxYearLabel(taxYearOf(r.writeOffAt) - 1);
+    r.everRepaidInFull = r.cleared != null;
+    r.yearsRepaying = years.filter(function (y) { return y.phase === "repaying"; }).length;
+    r.milestones = milestones(r);
+    return r;
+  }
+
+  function milestones(r) {
+    var out = [];
+    var borrowedAtStart = r.balanceAtRepayStart;
+    var seenHalf = false, seenTurn = false, seenPeak = false;
+    var peak = borrowedAtStart, peakYear = null;
+
+    r.years.forEach(function (y) {
+      if (y.closingBalance > peak) { peak = y.closingBalance; peakYear = y; }
+    });
+
+    var firstRepayYear = r.years.filter(function (y) { return y.phase === "repaying"; })[0];
+
+    r.years.forEach(function (y) {
+      if (y.phase !== "repaying") return;
+      if (!seenTurn && (y.repaid + y.voluntary) > y.interest) {
+        seenTurn = true;
+        // If that is true from the very first year, the balance never grew and
+        // there was no turning point to report.
+        if (y !== firstRepayYear) {
+          out.push({
+            year: y.label,
+            kind: "turn",
+            text: "Repayments overtake interest for the first time — the balance starts to fall."
+          });
+        }
+      }
+      if (!seenHalf && borrowedAtStart > 0 && y.cumRepaid >= borrowedAtStart / 2) {
+        seenHalf = true;
+        out.push({
+          year: y.label,
+          kind: "half",
+          text: "Total repaid passes half of what was owed when repayments began."
+        });
+      }
+    });
+
+    if (peakYear && peak > borrowedAtStart * 1.0001) {
+      out.unshift({
+        year: peakYear.label,
+        kind: "peak",
+        text: "The balance peaks at " + money(peak) + " — interest is still outrunning the deductions."
+      });
+    }
+    if (!seenTurn && r.yearsRepaying > 0) {
+      out.push({
+        year: "—",
+        kind: "never",
+        text: "Repayments never overtake interest. The balance grows every year until it is written off."
+      });
+    }
+    if (r.cleared != null) {
+      out.push({
+        year: taxYearLabel(taxYearOf(r.cleared)),
+        kind: "cleared",
+        text: "Cleared in full — " + money(r.totalRepaid) + " repaid on " + money(r.borrowed) + " borrowed."
+      });
+    } else {
+      out.push({
+        year: r.writeOffLabel,
+        kind: "writtenOff",
+        text: "Written off with " + money(r.writtenOff) + " outstanding, after " + r.yearsRepaying + " years of repayments."
+      });
+    }
+    return out;
+  }
+
+  function money(n) {
+    return "£" + Math.round(n).toLocaleString("en-GB");
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * THE OTHER THING YOU COULD DO WITH THE MONEY
+   *
+   * Two choices, priced at the same date so they can be compared honestly:
+   *
+   *   Repay as required  — hand over the stream of deductions.
+   *   Clear it today     — hand over the whole balance now, then pay nothing.
+   *
+   * The second looks cheaper because the number is smaller, but money paid
+   * today is worth more than money paid in 2060. So both are carried forward
+   * to the year the loan ends at the savings rate: whichever is the smaller
+   * pile at that date is the one that actually cost less.
+   *
+   * Payments are treated as falling mid-year, which is what a stream of twelve
+   * monthly deductions averages out to.
+   * -------------------------------------------------------------------- */
+
+  // Both choices, carried to `endYear` at savings rate `s`. Separated out so
+  // the break-even search can run it many times without re-simulating.
+  function fvAt(r, s) {
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!repaying.length) return null;
+
+    var startYear = repaying[0].taxYear;
+    var endYear = repaying[repaying.length - 1].taxYear + 1;
+    var span = endYear - startYear;
+    var lump = r.balanceAtRepayStart || 0;
+
+    var fvRepayments = 0, paidOut = 0;
+    repaying.forEach(function (y) {
+      var paid = y.repaid + y.voluntary;
+      paidOut += paid;
+      fvRepayments += paid * Math.pow(1 + s, Math.max(0, endYear - y.taxYear - 0.5));
+    });
+
+    var upfrontPaid = 0, fvUpfront = 0;
+    r.years.forEach(function (y) {
+      if (!(y.borrowed > 0)) return;
+      upfrontPaid += y.borrowed;
+      fvUpfront += y.borrowed * Math.pow(1 + s, Math.max(0, endYear - y.taxYear - 0.5));
+    });
+
+    var fvLump = lump * Math.pow(1 + s, span);
+    if (upfrontPaid <= 0) { upfrontPaid = lump; fvUpfront = fvLump; }
+
+    return { startYear: startYear, endYear: endYear, span: span, lump: lump,
+             fvRepayments: fvRepayments, paidOut: paidOut,
+             upfrontPaid: upfrontPaid, fvUpfront: fvUpfront, fvLump: fvLump };
+  }
+
+  /* The savings rate at which repaying as required and clearing the balance
+     today cost exactly the same. Below it, clearing wins; above it, keeping
+     the money does. Returned as null when one choice wins at every rate. */
+  function breakEvenSavings(r) {
+    var f = function (s) {
+      var v = fvAt(r, s);
+      return v ? v.fvRepayments - v.fvLump : 0;
+    };
+    var lo = 0, hi = 0.30;
+    var flo = f(lo), fhi = f(hi);
+    if (!isFinite(flo) || !isFinite(fhi) || flo === 0) return null;
+    if (flo > 0 === fhi > 0) return null;             // no crossing in range
+    for (var i = 0; i < 60; i++) {
+      var mid = (lo + hi) / 2;
+      if (f(mid) > 0 === flo > 0) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+
+  function opportunity(r, opts) {
+    var s = opts && opts.savings != null ? opts.savings : 0.045;
+    var infl = opts && opts.inflation != null ? opts.inflation : DEFAULT_ASSUMPTIONS.inflation;
+
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!repaying.length) {
+      return { lump: r.balanceAtRepayStart || 0, years: 0, savingsRate: s,
+               fvRepayments: 0, fvLump: r.balanceAtRepayStart || 0,
+               paidOut: 0, foregoneGrowth: 0, realForegoneGrowth: 0,
+               baseYear: null, pvRepayments: 0, pvUpfront: 0, pvLump: 0,
+               upfrontPaid: 0, fvUpfront: 0, realFvUpfront: 0, cheapest: null, breakEven: null,
+               clearingSaves: -(r.balanceAtRepayStart || 0), clearingIsBetter: false,
+               realFvRepayments: 0, realFvLump: r.balanceAtRepayStart || 0,
+               realClearingSaves: -(r.balanceAtRepayStart || 0), track: [] };
+    }
+
+    var startYear = repaying[0].taxYear;
+    var endYear = repaying[repaying.length - 1].taxYear + 1;   // the loan is done by here
+    var span = endYear - startYear;
+    var lump = r.balanceAtRepayStart || 0;
+
+    var fvRepayments = 0, track = [], running = 0;
+    repaying.forEach(function (y) {
+      var paid = y.repaid + y.voluntary;
+      var carried = Math.max(0, endYear - y.taxYear - 0.5);
+      fvRepayments += paid * Math.pow(1 + s, carried);
+
+      // What the two choices are worth as the years pass, for the chart.
+      running = running * (1 + s) + paid * Math.pow(1 + s, 0.5);
+      track.push({
+        taxYear: y.taxYear,
+        label: y.label,
+        repaymentsSaved: running,                                  // the stream, compounding
+        lumpGrown: lump * Math.pow(1 + s, y.taxYear - startYear + 1) // the balance, left to grow
+      });
+    });
+
+    var deflate = Math.pow(1 + infl, -span);
+
+    // What the repayments would have earned on top of themselves had they gone
+    // into a savings account instead: the pot, less what you actually put in.
+    // This is the growth forfeited, not the money — that you were always going
+    // to part with.
+    var fvLump = lump * Math.pow(1 + s, span);
+    var paidOut = repaying.reduce(function (t, y) { return t + y.repaid + y.voluntary; }, 0);
+
+    // The same three sums discounted back to the year the loan was taken out.
+    // Ranking is identical to the forward view — it is the same numbers scaled
+    // by one constant — but a figure in money the reader is standing in is far
+    // easier to weigh than one in 2057's.
+    var baseYear = r.years.length ? r.years[0].taxYear : startYear;
+    var toBase = function (v, year) { return v / Math.pow(1 + s, year - baseYear); };
+
+    var pvRepayments = 0;
+    repaying.forEach(function (y) {
+      pvRepayments += toBase(y.repaid + y.voluntary, y.taxYear + 0.5);
+    });
+    var pvUpfront = 0;
+    r.years.forEach(function (y) {
+      if (y.borrowed > 0) pvUpfront += toBase(y.borrowed, y.taxYear + 0.5);
+    });
+    var pvLump = toBase(lump, startYear);
+    if (pvUpfront <= 0) pvUpfront = pvLump;
+    var foregoneGrowth = fvRepayments - paidOut;
+
+    // The third life: never borrow, and find the fees in cash while you study.
+    // That money leaves your hands decades before any repayment does, so to
+    // compare it fairly it has to be carried to the same date as the rest.
+    var upfrontPaid = 0, fvUpfront = 0;
+    r.years.forEach(function (y) {
+      if (!(y.borrowed > 0)) return;
+      upfrontPaid += y.borrowed;
+      fvUpfront += y.borrowed * Math.pow(1 + s, Math.max(0, endYear - y.taxYear - 0.5));
+    });
+    if (upfrontPaid <= 0) {
+      // No drawdowns to find — the scenario opened with a balance, so paying
+      // your own way and clearing it today are the same act.
+      upfrontPaid = lump;
+      fvUpfront = fvLump;
+    }
+
+    return {
+      lump: lump,
+      years: span,
+      savingsRate: s,
+      fvRepayments: fvRepayments,
+      fvLump: fvLump,
+      paidOut: paidOut,
+      baseYear: baseYear,
+      pvRepayments: pvRepayments,
+      pvUpfront: pvUpfront,
+      pvLump: pvLump,
+      upfrontPaid: upfrontPaid,
+      fvUpfront: fvUpfront,
+      realFvUpfront: fvUpfront * deflate,
+      // Cheapest of the three, priced at the same date.
+      cheapest: (function () {
+        var opts = [
+          { key: "repay", label: "borrow and repay", fv: fvRepayments },
+          { key: "upfront", label: "pay the fees in cash", fv: fvUpfront },
+          { key: "clear", label: "clear the balance today", fv: fvLump }
+        ].filter(function (o) { return o.fv > 0; });
+        opts.sort(function (a, b) { return a.fv - b.fv; });
+        return opts.length ? opts[0] : null;
+      })(),
+      breakEven: breakEvenSavings(r),
+      foregoneGrowth: foregoneGrowth,
+      realForegoneGrowth: foregoneGrowth * deflate,
+      // Positive means clearing the balance today was the cheaper of the two.
+      clearingSaves: fvRepayments - fvLump,
+      clearingIsBetter: fvRepayments > fvLump,
+      realFvRepayments: fvRepayments * deflate,
+      realFvLump: fvLump * deflate,
+      realClearingSaves: (fvRepayments - fvLump) * deflate,
+      track: track
+    };
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * PUBLIC ENTRY POINT
+   * -------------------------------------------------------------------- */
+
+  function simulate(scenario) {
+    var a = Object.assign({}, DEFAULT_ASSUMPTIONS, scenario.assumptions || {});
+    var salaryAt = salaryLine(scenario.salaries || {}, a);
+    var ctx = { assumptions: a, salaryAt: salaryAt, overpayment: scenario.overpayment };
+
+    var results = (scenario.loans || []).map(function (loan) {
+      return simulateLoan(loan, ctx);
+    });
+
+    var combined = combine(results, a);
+    return {
+      loans: results,
+      combined: combined,
+      opportunity: opportunity(combined, {
+        savings: a.savings,
+        inflation: a.inflation
+      }),
+      assumptions: a
+    };
+  }
+
+  // Two loans repaid at once (an undergraduate plan plus a postgraduate loan)
+  // are deducted from the same pay independently, so the ledgers simply add.
+  function combine(results, a) {
+    if (!results.length) return null;
+    if (results.length === 1) return results[0];
+
+    var byYear = {};
+    var order = [];
+    results.forEach(function (r) {
+      r.years.forEach(function (y) {
+        if (!byYear[y.taxYear]) {
+          byYear[y.taxYear] = {
+            taxYear: y.taxYear, label: y.label, phase: y.phase,
+            salary: y.salary, threshold: null, rateLow: null, rateHigh: null,
+            openingBalance: 0, closingBalance: 0,
+            borrowed: 0, interest: 0, repaid: 0, voluntary: 0, months: y.months
+          };
+          order.push(y.taxYear);
+        }
+        var t = byYear[y.taxYear];
+        if (t.threshold == null) t.threshold = y.threshold;
+        t.rateLow = t.rateLow == null ? y.rateLow : Math.min(t.rateLow, y.rateLow);
+        t.rateHigh = t.rateHigh == null ? y.rateHigh : Math.max(t.rateHigh, y.rateHigh);
+        t.openingBalance += y.openingBalance;
+        t.closingBalance += y.closingBalance;
+        t.borrowed += y.borrowed;
+        t.interest += y.interest;
+        t.repaid += y.repaid;
+        t.voluntary += y.voluntary;
+        t.salary = Math.max(t.salary, y.salary);
+        if (y.phase === "repaying") t.phase = "repaying";
+      });
+    });
+
+    order.sort(function (x, y) { return x - y; });
+    var cumRepaid = 0, cumInterest = 0, cumBorrowed = 0;
+    var years = order.map(function (k) {
+      var y = byYear[k];
+      cumBorrowed += y.borrowed; cumInterest += y.interest;
+      cumRepaid += y.repaid + y.voluntary;
+      y.cumBorrowed = cumBorrowed; y.cumInterest = cumInterest; y.cumRepaid = cumRepaid;
+      y.monthlyRepayment = y.months ? y.repaid / y.months : 0;
+      y.interestOutranPayments = y.phase === "repaying" && y.interest > (y.repaid + y.voluntary);
+      var f = Math.pow(1 + a.inflation, -(y.taxYear - order[0]));
+      y.deflator = f;
+      y.realClosingBalance = y.closingBalance * f;
+      y.realRepaid = (y.repaid + y.voluntary) * f;
+      y.realSalary = y.salary * f;
+      return y;
+    });
+
+    var sum = function (f) { return results.reduce(function (s, r) { return s + f(r); }, 0); };
+    var borrowed = sum(function (r) { return r.borrowed; });
+    var repaid = sum(function (r) { return r.totalRepaid; });
+
+    return {
+      key: "combined",
+      planLabel: results.map(function (r) { return r.planLabel; }).join(" + "),
+      years: years,
+      borrowed: borrowed,
+      totalRepaid: repaid,
+      totalRealRepaid: years.reduce(function (s, y) { return s + y.realRepaid; }, 0),
+      totalInterest: sum(function (r) { return r.totalInterest; }),
+      voluntary: sum(function (r) { return r.voluntary; }),
+      writtenOff: sum(function (r) { return r.writtenOff || 0; }),
+      balanceAtRepayStart: sum(function (r) { return r.balanceAtRepayStart; }),
+      perPoundBorrowed: borrowed > 0 ? repaid / borrowed : 0,
+      everRepaidInFull: results.every(function (r) { return r.everRepaidInFull; }),
+      yearsRepaying: Math.max.apply(null, results.map(function (r) { return r.yearsRepaying; })),
+      clearedLabel: results.every(function (r) { return r.everRepaidInFull; })
+        ? results.map(function (r) { return r.clearedLabel; }).sort().pop() : null,
+      writeOffLabel: results.map(function (r) { return r.writeOffLabel; }).sort().pop(),
+      milestones: [],
+      parts: results
+    };
+  }
+
+  /* ---------------------------------------------------------------------- *
+   * CONVENIENCES THE INTERFACE LEANS ON
+   * -------------------------------------------------------------------- */
+
+  // The April after a course of `years` starting in September `startYear`.
+  function repaymentStartYear(startYear, years) {
+    return startYear + years + 1;
+  }
+
+  return {
+    RULES: RULES,
+    DEFAULT_ASSUMPTIONS: DEFAULT_ASSUMPTIONS,
+    BASE_TAX_YEAR: BASE_TAX_YEAR,
+    simulate: simulate,
+    simulateLoan: simulateLoan,
+    opportunity: opportunity,
+    breakEvenSavings: breakEvenSavings,
+    thresholdFor: thresholdFor,
+    upperThresholdFor: upperThresholdFor,
+    interestRate: interestRate,
+    monthlyDeduction: monthlyDeduction,
+    drawdownSchedule: drawdownSchedule,
+    salaryLine: salaryLine,
+    repaymentStartYear: repaymentStartYear,
+    taxYearLabel: taxYearLabel,
+    taxYearOf: taxYearOf,
+    ym: ym,
+    money: money
+  };
+});
+
+</script>
+<script>
 /* ============================================================================
    STUDENT LOAN REPAYMENT SIMULATOR — the interface
    Reads the form, hands a scenario to engine.js, and draws the result.
@@ -2669,3 +4799,7 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 })();
+
+</script>
+</body>
+</html>

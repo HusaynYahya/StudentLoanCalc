@@ -601,15 +601,6 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 
 /* ---- breaks in employment ---------------------------------------------- */
 
-.breaks { display: grid; gap: .4rem; }
-.brk { display: flex; align-items: baseline; gap: .4rem; }
-.brk__lab { font-size: .74rem; color: var(--ink-4); }
-.brk .ctl__val input { width: 4.4ch; }
-.brk__x {
-  margin-left: auto; font: inherit; font-size: 1rem; line-height: 1; cursor: pointer;
-  border: 0; background: none; color: var(--ink-4); padding: .1rem .3rem; border-radius: 4px;
-}
-.brk__x:hover { color: var(--bad); background: var(--bg-4); }
 
 /* ---- the three choices, as a table with headings ----------------------- */
 
@@ -732,3 +723,114 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .draw .dp { cursor: grab; }
 .draw .dp:hover { r: 6.5; }
 .draw .dp:active { cursor: grabbing; }
+
+/* ---- the timeline, as blocks you can grab ------------------------------ *
+ * Each block is a pane of coloured glass: almost no fill, a bright edge and
+ * a glow that leaks both ways, so overlapping years still read.           */
+.tl {
+  position: relative;
+  margin: .6rem 0 .5rem;
+  padding: 1.15rem .7rem .4rem;
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.028), rgba(255,255,255,0)),
+    var(--bg-2);
+  border: 1px solid var(--line);
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+.tl.is-grabbed { cursor: grabbing; }
+.tl__scale { position: relative; height: 0; }
+.tl__tick {
+  position: absolute; top: -1rem; transform: translateX(-50%);
+  font-size: .64rem; letter-spacing: .02em; color: var(--ink-4);
+  font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+.tl__tick.is-first { left: 0 !important; transform: none; }
+.tl__tick.is-last  { left: auto !important; right: 0; transform: none; }
+.tl__lane { position: relative; height: 2rem; margin: 0 0 .3rem; }
+.tl__lane:last-child { height: 1.6rem; margin-bottom: 0; }
+
+.tl__blk {
+  position: absolute; top: 0; bottom: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--k);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--k) 13%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--k) 22%, transparent),
+              0 0 14px -2px color-mix(in srgb, var(--k) 55%, transparent),
+              inset 0 0 18px -6px color-mix(in srgb, var(--k) 60%, transparent);
+  cursor: grab;
+  overflow: hidden;
+  z-index: 2;
+}
+/* The career runs to the edge of the track, so it lies behind everything
+   else — otherwise it covers the controls of whatever it starts next to. */
+.tl__blk.is-open { z-index: 1; }
+.tl__blk:hover { z-index: 3; }
+.tl.is-grabbed .tl__blk { cursor: grabbing; }
+.tl__blk:hover { background: color-mix(in srgb, var(--k) 20%, transparent); }
+.tl__blk.is-open {
+  border-right: 0;
+  border-top-right-radius: 0; border-bottom-right-radius: 0;
+  -webkit-mask-image: linear-gradient(90deg, #000 72%, transparent 100%);
+          mask-image: linear-gradient(90deg, #000 72%, transparent 100%);
+}
+.tl__blk.k-ug   { --k: var(--info); }
+.tl__blk.k-pg   { --k: #a78bfa; }
+.tl__blk.k-work { --k: var(--good); }
+.tl__blk.k-brk  { --k: var(--warn); }
+
+.tl__name {
+  font-size: .68rem; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--k);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--k) 60%, transparent);
+  white-space: nowrap; pointer-events: none; padding: 0 .55rem;
+}
+/* On a one-year block two full-width grips would meet in the middle and
+   leave nothing to take hold of, so they give way with the block. */
+.tl__grip {
+  position: absolute; top: 0; bottom: 0; width: min(.45rem, 22%);
+  cursor: ew-resize;
+}
+.tl__grip.is-l { left: 0; }
+.tl__grip.is-r { right: 0; }
+.tl__grip::after {
+  content: ""; position: absolute; top: 22%; bottom: 22%; left: 50%;
+  width: 2px; margin-left: -1px; border-radius: 2px;
+  background: var(--k); opacity: .55;
+}
+.tl__grip:hover::after { opacity: 1; box-shadow: 0 0 8px var(--k); }
+.tl__x {
+  position: absolute; top: 0; right: 0;
+  width: 1rem; height: 55%; line-height: 1;
+  display: grid; place-items: center;
+  border: 0; border-radius: 4px; background: none;
+  color: var(--k); opacity: 0; font-size: .8rem; cursor: pointer;
+}
+.tl__blk:hover .tl__x { opacity: .8; }
+.tl__x:hover { opacity: 1; background: color-mix(in srgb, var(--k) 25%, transparent); }
+.tl__blk:hover .tl__grip::after { opacity: .9; }
+.tl__empty {
+  margin: 0; padding-left: .1rem; font-size: .7rem; color: var(--ink-4);
+  line-height: 1.6rem;
+}
+.tlkey {
+  display: flex; flex-wrap: wrap; gap: .1rem .8rem;
+  margin: .1rem 0 .45rem; padding: 0; list-style: none;
+}
+.tlkey li {
+  display: flex; align-items: center; gap: .3rem;
+  font-size: .66rem; letter-spacing: .03em; color: var(--ink-4);
+}
+.tlkey li::before {
+  content: ""; width: .5rem; height: .5rem; border-radius: 2px;
+  border: 1px solid var(--k);
+  background: color-mix(in srgb, var(--k) 30%, transparent);
+  box-shadow: 0 0 6px -1px var(--k);
+}
+.tlkey .k-ug   { --k: var(--info); }
+.tlkey .k-pg   { --k: #a78bfa; }
+.tlkey .k-work { --k: var(--good); }
+.tlkey .k-brk  { --k: var(--warn); }
