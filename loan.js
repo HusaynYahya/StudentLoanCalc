@@ -1261,12 +1261,12 @@
     });
 
     var choices = [
-      { key: "repay",   k: "Borrow and repay",       cash: r.totalRepaid,  fv: o.fvRepayments, real: o.realFvRepayments,
-        why: "deductions spread over " + r.yearsRepaying + " years" },
-      { key: "upfront", k: "Pay the fees in cash",   cash: o.upfrontPaid,  fv: o.fvUpfront,    real: o.realFvUpfront,
-        why: "all of it during the course" },
+      { key: "repay",   k: "Borrow and repay",        cash: r.totalRepaid, fv: o.fvRepayments, real: o.realFvRepayments,
+        why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
+      { key: "upfront", k: "Pay the fees in cash",    cash: o.upfrontPaid, fv: o.fvUpfront,    real: o.realFvUpfront,
+        why: "all of it while you study" },
       { key: "clear",   k: "Clear the balance today", cash: o.lump,        fv: o.fvLump,       real: o.realFvLump,
-        why: "one payment, now" }
+        why: "one payment, right now" }
     ].filter(function (c) { return c.cash > 0; })
      // With an opening balance there are no fees to find, so "pay your own
      // way" and "clear it today" are the same act — list it once.
@@ -1274,20 +1274,32 @@
        return !all.some(function (other, k) {
          return k < i && Math.abs(other.cash - c.cash) < 1 && Math.abs(other.fv - c.fv) < 1;
        });
-     });
+     })
+     // Cheapest first, so the answer is the first thing read rather than
+     // something to be hunted for down a fixed list.
+     .sort(function (a, b) { return a.fv - b.fv; });
 
-    var table = '<div class="fgroup fgroup--wide"><h4>' + g3 + "</h4>" +
-      '<table class="choices"><thead><tr><th scope="col"></th>' +
-      '<th scope="col" class="n">In cash</th><th scope="col" class="n">Worth at ' + endLabel + "</th>" +
+    var best = choices[0];
+
+    var table = choices.length < 2 ? "" :
+      '<div class="fgroup fgroup--wide"><h4>Which is actually cheapest?</h4>' +
+      '<p class="fgroup__lede">Money paid sooner costs you more than the same money paid later, because ' +
+      'what you keep can earn in the meantime. So each option is followed through to <b>' + endLabel +
+      "</b> \u2014 the year this loan ends \u2014 and compared there.</p>" +
+      '<div class="scroll"><table class="choices"><thead><tr><th scope="col">Option</th>' +
+      '<th scope="col" class="n">You pay</th>' +
+      '<th scope="col" class="n">Real cost by ' + endLabel + "</th>" +
+      '<th scope="col" class="n">Difference</th>' +
       "</tr></thead><tbody>" +
-      choices.map(function (c) {
-        var win = o.cheapest && o.cheapest.key === c.key;
-        return '<tr class="' + (win ? "is-win" : "") + '">' +
-          "<th scope=\"row\">" + c.k + "<span>" + c.why + (win ? " \u00b7 cheapest" : "") + "</span></th>" +
+      choices.map(function (c, i) {
+        var gap = c.fv - best.fv;
+        return '<tr class="' + (i === 0 ? "is-win" : "") + '">' +
+          "<th scope=\"row\">" + c.k + "<span>" + c.why + "</span></th>" +
           '<td class="n">' + gbp(c.cash) + "</td>" +
-          '<td class="n lead">' + money(c.fv, c.real) + "</td></tr>";
+          '<td class="n lead">' + money(c.fv, c.real) + "</td>" +
+          '<td class="n gap">' + (i === 0 ? "cheapest" : "+" + gbp(gap)) + "</td></tr>";
       }).join("") +
-      "</tbody></table></div>";
+      "</tbody></table></div></div>";
 
     $("focusGrid").innerHTML = groups.map(function (g) {
       return '<div class="fgroup"><h4>' + g.name + "</h4><dl>" + g.rows.filter(function (row) {

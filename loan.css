@@ -612,7 +612,12 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 /* ---- the three choices, as a table with headings ----------------------- */
 
 .fgroup--wide { grid-column: 1 / -1; }
-.choices { width: 100%; border-collapse: collapse; }
+.fgroup__lede {
+  margin: 0 0 .9rem; font-size: .8rem; line-height: 1.6;
+  color: var(--ink-3); max-width: 78ch;
+}
+.fgroup__lede b { color: var(--ink-2); font-weight: 600; }
+.choices { width: 100%; border-collapse: collapse; min-width: 460px; }
 .choices thead th {
   text-align: left; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
   color: var(--ink-4); font-weight: 700; padding: 0 .55rem .35rem;
@@ -631,6 +636,11 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 }
 .choices td.lead { font-size: 1rem; color: var(--ink); }
 .choices tr.is-win th, .choices tr.is-win td.lead { color: var(--good); }
+.choices td.gap { color: var(--ink-4); font-size: .8rem; }
+.choices tr.is-win td.gap {
+  color: var(--good); font-weight: 700; font-family: var(--ui);
+  font-size: .68rem; letter-spacing: .1em; text-transform: uppercase;
+}
 .choices tr.is-win th span { color: var(--good); opacity: .8; }
 
 /* ---- the recommendation ------------------------------------------------ */
