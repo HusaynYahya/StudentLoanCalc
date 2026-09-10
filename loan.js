@@ -1791,10 +1791,11 @@
   }
 
   /* ---- what you hand over, against what it could have been ----------------
-   * Both lines are the same money. One is the repayments piling up as you
-   * make them; the other is those same repayments in a savings account,
-   * earning. The gap between them is the growth you never got — not money
-   * you were ever holding, but money the loan cost you all the same.
+   * Three lines. The fees and living costs found in cash, which is what the
+   * other life costs and stops the day the course does. The repayments piling
+   * up as you make them. And those same repayments in a savings account,
+   * earning — the gap to the line below being the growth you never got, not
+   * money you were ever holding, but money the loan cost you all the same.
    * ---------------------------------------------------------------------- */
 
   function renderOppChart(sim) {
@@ -1805,17 +1806,19 @@
     var saved = {};
     o.track.forEach(function (t) { saved[t.taxYear] = t.repaymentsSaved; });
 
-    // What you have actually handed over by each year, and what the same
-    // payments would have been worth had you kept them.
+    // What you have actually handed over by each year, what the same payments
+    // would have been worth had you kept them, and what the other life costs:
+    // the fees and living costs found in cash while the course runs.
     var pts = [];
     sim.combined.years.forEach(function (y) {
-      pts.push({ taxYear: y.taxYear, label: y.label, v: saved[y.taxYear] || 0, paid: y.cumRepaid });
+      pts.push({ taxYear: y.taxYear, label: y.label,
+                 v: saved[y.taxYear] || 0, paid: y.cumRepaid, up: y.cumBorrowed });
     });
     if (pts.length < 2) { $("oppChart").innerHTML = ""; $("oppKey").innerHTML = ""; return; }
 
     var last = pts[pts.length - 1];
     var max = 0;
-    pts.forEach(function (p) { max = Math.max(max, p.v, p.paid); });
+    pts.forEach(function (p) { max = Math.max(max, p.v, p.paid, p.up); });
     var s = niceScale(max);
 
     // Both lines stop the year the loan does — cleared, or cut off at the
@@ -1827,22 +1830,32 @@
                     top: s.top, step: s.step, fmt: gbpShort, w: vizW("oppChart", 260, 760), h: 260,
                     title: "What you hand over against what the same money would have grown to" });
 
-    var paidLine = pts.map(function (p, i) {
-      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p.paid).toFixed(1);
-    }).join(" ");
+    var runOf = function (key) {
+      return pts.map(function (p, i) {
+        return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p[key]).toFixed(1);
+      }).join(" ");
+    };
 
     $("oppChart").innerHTML = f.open +
-      '<path d="' + paidLine + '" fill="none" stroke="var(--warn)" stroke-width="2.25"/>' +
+      // In Balance mode the fees are already spent; there is no cash
+      // alternative left to draw, and cumBorrowed stays at zero.
+      (last.up > 0
+        ? '<path d="' + runOf("up") + '" fill="none" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="5 4"/>'
+        : "") +
+      '<path d="' + runOf("paid") + '" fill="none" stroke="var(--warn)" stroke-width="2.25"/>' +
       '<path d="' + line(pts, f) + '" fill="none" stroke="var(--good)" stroke-width="2.25"/>' +
       (wall != null ? cutoffMarks([sim], f) : "") +
       f.close;
 
     $("oppKey").innerHTML =
+      (last.up > 0
+        ? '<i style="color:var(--ink-3)">Paid upfront, never borrowing \u2014 ' + gbp(last.up) + "</i>"
+        : "") +
       '<i style="color:var(--warn)">What you hand over \u2014 ' + gbp(last.paid) + "</i>" +
       '<i style="color:var(--good)">The same money, saved instead at ' + pct(o.savingsRate) +
         " \u2014 " + gbp(last.v) + "</i>" +
-      '<i style="color:var(--ink-4)">the gap is the ' + gbp(Math.max(0, last.v - last.paid)) +
-        " of growth you never earned</i>";
+      '<i style="color:var(--ink-4)">the gap between the last two is the ' +
+        gbp(Math.max(0, last.v - last.paid)) + " of growth you never earned</i>";
   }
 
   /* ---- the hard cut-off --------------------------------------------------- *

@@ -833,3 +833,11 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .tlkey .k-ug   { --k: var(--info); }
 .tlkey .k-pg   { --k: #a78bfa; }
 .tlkey .k-work { --k: var(--good); }
+
+/* ---- a heading inside a card, for a card that holds more than one thing -- */
+.sub {
+  margin: 1.5rem 0 .15rem; font-size: .82rem; color: var(--ink-2);
+  letter-spacing: -.005em;
+}
+.sub:first-of-type { margin-top: 1.1rem; }
+.sub__note { margin: 0 0 .2rem; font-size: .74rem; color: var(--ink-4); }
