@@ -1790,12 +1790,11 @@
         })();
   }
 
-  /* ---- the fees against the pot -------------------------------------------
-   * One line is what the degree costs if you find the money yourself: the
-   * fees and living costs as they fall due, then flat for the rest of your
-   * life. The other is what you would be holding if every repayment went
-   * into a savings account instead. Where the second passes the first is the
-   * year the saved repayments outgrow the bill they replaced.
+  /* ---- what you hand over, against what it could have been ----------------
+   * Both lines are the same money. One is the repayments piling up as you
+   * make them; the other is those same repayments in a savings account,
+   * earning. The gap between them is the growth you never got — not money
+   * you were ever holding, but money the loan cost you all the same.
    * ---------------------------------------------------------------------- */
 
   function renderOppChart(sim) {
@@ -1806,40 +1805,44 @@
     var saved = {};
     o.track.forEach(function (t) { saved[t.taxYear] = t.repaymentsSaved; });
 
-    // The bill, as it falls due. It stops rising the day the course does.
-    var pts = [], bill = 0, crossed = null;
+    // What you have actually handed over by each year, and what the same
+    // payments would have been worth had you kept them.
+    var pts = [];
     sim.combined.years.forEach(function (y) {
-      bill = y.cumBorrowed;
-      var pot = saved[y.taxYear] || 0;
-      pts.push({ taxYear: y.taxYear, label: y.label, v: pot, bill: bill });
-      if (crossed == null && pot > bill && bill > 0) crossed = y.label;
+      pts.push({ taxYear: y.taxYear, label: y.label, v: saved[y.taxYear] || 0, paid: y.cumRepaid });
     });
     if (pts.length < 2) { $("oppChart").innerHTML = ""; $("oppKey").innerHTML = ""; return; }
 
+    var last = pts[pts.length - 1];
     var max = 0;
-    pts.forEach(function (p) { max = Math.max(max, p.v, p.bill); });
+    pts.forEach(function (p) { max = Math.max(max, p.v, p.paid); });
     var s = niceScale(max);
-    var f = frame({ years: pts, xMin: pts[0].taxYear, xMax: pts[pts.length - 1].taxYear,
-                    top: s.top, step: s.step, fmt: gbpShort, w: vizW("oppChart", 260, 760), h: 260,
-                    title: "The fees paid in cash against the repayments saved instead" });
 
-    var billLine = pts.map(function (p, i) {
-      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p.bill).toFixed(1);
+    // Both lines stop the year the loan does — cleared, or cut off at the
+    // write-off. When it is the write-off that ends them, the wall is what
+    // the reader is looking at, so make room for it and draw it.
+    var wall = sim.combined.writtenOff > 0 ? cutoffMax([sim]) : null;
+    var f = frame({ years: pts, xMin: pts[0].taxYear,
+                    xMax: wall != null ? Math.max(last.taxYear, wall) : last.taxYear,
+                    top: s.top, step: s.step, fmt: gbpShort, w: vizW("oppChart", 260, 760), h: 260,
+                    title: "What you hand over against what the same money would have grown to" });
+
+    var paidLine = pts.map(function (p, i) {
+      return (i ? "L" : "M") + f.x(p.taxYear).toFixed(1) + " " + f.y(p.paid).toFixed(1);
     }).join(" ");
 
     $("oppChart").innerHTML = f.open +
-      '<path d="' + billLine + '" fill="none" stroke="var(--warn)" stroke-width="2.25"/>' +
+      '<path d="' + paidLine + '" fill="none" stroke="var(--warn)" stroke-width="2.25"/>' +
       '<path d="' + line(pts, f) + '" fill="none" stroke="var(--good)" stroke-width="2.25"/>' +
+      (wall != null ? cutoffMarks([sim], f) : "") +
       f.close;
 
     $("oppKey").innerHTML =
-      '<i style="color:var(--warn)">' + (state.loanMode === "balance"
-        ? "The balance, cleared outright"
-        : "The fees and living costs, paid in cash") + " \u2014 " + gbp(o.upfrontPaid) + "</i>" +
-      '<i style="color:var(--good)">Your repayments, saved instead at ' + pct(o.savingsRate) + "</i>" +
-      (crossed
-        ? '<i style="color:var(--ink-4)">the pot passes the bill in ' + crossed + "</i>"
-        : '<i style="color:var(--ink-4)">the pot never reaches the bill</i>');
+      '<i style="color:var(--warn)">What you hand over \u2014 ' + gbp(last.paid) + "</i>" +
+      '<i style="color:var(--good)">The same money, saved instead at ' + pct(o.savingsRate) +
+        " \u2014 " + gbp(last.v) + "</i>" +
+      '<i style="color:var(--ink-4)">the gap is the ' + gbp(Math.max(0, last.v - last.paid)) +
+        " of growth you never earned</i>";
   }
 
   /* ---- the hard cut-off --------------------------------------------------- *
@@ -2037,6 +2040,9 @@
     var every = Math.max(1, Math.round(span / 8));
     var ticks = "";
     for (var ty = from; ty <= to; ty += every) {
+      // The last year is drawn separately and always; a tick that would land
+      // on top of it is dropped rather than printed over it.
+      if (x(to) - x(ty) < 34) continue;
       ticks += '<text x="' + x(ty).toFixed(1) + '" y="' + (axis - 13) +
         '" text-anchor="middle" font-size="10.5" fill="var(--ink-4)">' + ty + "</text>";
     }
@@ -2044,17 +2050,22 @@
       '" text-anchor="end" font-size="10.5" fill="var(--ink-4)">' + to + "</text>";
 
     var colour = { peak: "var(--warn)", end: "var(--good)", off: "var(--bad)", plain: "var(--ink-2)" };
-    var rowEnds = [], marks = "";
+    // A label near the end reads leftwards, so it takes the space to its left,
+    // not its right. Packing every label as though it grew rightwards is what
+    // laid them on top of one another.
+    var rows = [], marks = "";
     events.forEach(function (e) {
       var ex = x(e.year);
       var label = e.year + " · " + e.text;
       var width = label.length * 6.2 + 18;   // runs wide on purpose
+      var flip = ex + width > iw;            // near the end, label leftwards
+      var x0 = flip ? ex - width : ex - 10;
+      var x1 = flip ? ex + 10 : ex + width;
       var row = 0;
-      while (row < 5 && rowEnds[row] != null && rowEnds[row] > ex - 10) row++;
-      rowEnds[row] = ex + width;
+      while (rows[row] && rows[row].some(function (s) { return x0 < s[1] && x1 > s[0]; })) row++;
+      (rows[row] || (rows[row] = [])).push([x0, x1]);
       var ey = axis + 24 + row * 19;
       var c = colour[e.kind] || colour.plain;
-      var flip = ex + width > iw;               // near the end, label leftwards
       marks +=
         '<line x1="' + ex.toFixed(1) + '" y1="' + (axis + 4) + '" x2="' + ex.toFixed(1) + '" y2="' +
           (ey - 5) + '" stroke="' + c + '" stroke-width="1" opacity=".45"/>' +
@@ -2064,7 +2075,7 @@
           'text-anchor="' + (flip ? "end" : "start") + '" fill="' + c + '">' + label + "</text>";
     });
 
-    var H = axis + 24 + (rowEnds.length || 1) * 19 + 8;
+    var H = axis + 24 + (rows.length || 1) * 19 + 8;
     host.innerHTML =
       '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="What happens to the loan, by year">' +
       ticks + line + marks + "</svg>" +
