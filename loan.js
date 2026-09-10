@@ -19,56 +19,18 @@
    * cash. Illustrative, not a forecast: they are starting points to edit.
    * -------------------------------------------------------------------- */
 
+  /* Six paths, chosen to span the range of outcomes rather than the range of
+     job titles: their ceilings run £34k, £42k, £56k, £95k, £130k, £200k, each
+     about half again the last. Twelve were offered before, but five of them
+     shared a ceiling near £55k and three more sat within £5k of each other at
+     £90k, so most of the list was saying the same thing twice. Anything not
+     represented here is exactly what "Start + growth" and "5-year bands" are
+     for. */
   var CAREERS = [
     {
-      id: "grad", label: "Graduate, typical",
-      note: "Roughly the middle of the graduate labour market: a slow, steady climb.",
-      points: { 1: 30000, 5: 38000, 10: 46000, 20: 56000 }, after: 0.005
-    },
-    {
-      id: "tech", label: "Software and tech",
-      note: "Fast early progression, flattening once you are senior.",
-      points: { 1: 35000, 3: 48000, 6: 65000, 10: 80000, 20: 95000 }, after: 0.005
-    },
-    {
-      id: "medicine", label: "Doctor (NHS)",
-      note: "Foundation pay, then the training grades, then consultant. Five- or six-year course.",
-      points: { 1: 38000, 3: 52000, 6: 66000, 9: 82000, 13: 110000, 20: 130000 }, after: 0.005
-    },
-    {
-      id: "nursing", label: "Nursing and allied health",
-      note: "Agenda for Change: Band 5 to Band 7 over a decade or so.",
-      points: { 1: 31000, 4: 38000, 8: 46000, 15: 52000 }, after: 0.005
-    },
-    {
-      id: "teaching", label: "Teaching",
-      note: "The main pay scale, then the upper scale — most of the rise comes early.",
-      points: { 1: 33000, 4: 42000, 8: 50000, 15: 56000 }, after: 0.005
-    },
-    {
-      id: "law", label: "Law, outside the City",
-      note: "Training contract, qualification, then partnership-track progression.",
-      points: { 1: 28000, 3: 42000, 6: 58000, 10: 72000, 20: 90000 }, after: 0.005
-    },
-    {
-      id: "citylaw", label: "Law or banking, City",
-      note: "The top of the graduate market — a training contract or an analyst seat in the City.",
-      points: { 1: 60000, 3: 95000, 6: 130000, 10: 165000, 18: 200000 }, after: 0.005
-    },
-    {
-      id: "engineering", label: "Engineering",
-      note: "Graduate scheme, chartership, then a long plateau.",
-      points: { 1: 32000, 4: 42000, 8: 52000, 15: 62000 }, after: 0.005
-    },
-    {
-      id: "finance", label: "Accountancy and finance",
-      note: "Qualification at around three years is the step change.",
-      points: { 1: 30000, 3: 42000, 6: 58000, 10: 75000, 20: 92000 }, after: 0.005
-    },
-    {
-      id: "public", label: "Civil service and local government",
-      note: "Predictable grades, modest ceiling.",
-      points: { 1: 30000, 4: 37000, 8: 45000, 15: 52000 }, after: 0.005
+      id: "low", label: "Low or intermittent",
+      note: "Around or a little above the threshold, with long flat stretches. The case the write-off exists for.",
+      points: { 1: 24000, 5: 27000, 10: 30000, 20: 34000 }, after: 0.005
     },
     {
       id: "creative", label: "Charity, arts and media",
@@ -76,9 +38,24 @@
       points: { 1: 26000, 4: 31000, 8: 36000, 15: 42000 }, after: 0.005
     },
     {
-      id: "low", label: "Low or intermittent earnings",
-      note: "Around or a little above the threshold, with long flat stretches.",
-      points: { 1: 24000, 5: 27000, 10: 30000, 20: 34000 }, after: 0.005
+      id: "grad", label: "Graduate, typical",
+      note: "The middle of the graduate labour market — and close to teaching, nursing, engineering and the civil service, which all plateau near the same place.",
+      points: { 1: 30000, 5: 38000, 10: 46000, 20: 56000 }, after: 0.005
+    },
+    {
+      id: "tech", label: "Tech, law or finance",
+      note: "Fast early progression flattening once you are senior. Software, accountancy and law outside the City all land within a few thousand of each other.",
+      points: { 1: 35000, 3: 48000, 6: 65000, 10: 80000, 20: 95000 }, after: 0.005
+    },
+    {
+      id: "medicine", label: "Doctor (NHS)",
+      note: "Foundation pay, then the training grades, then consultant. A five- or six-year course.",
+      points: { 1: 38000, 3: 52000, 6: 66000, 9: 82000, 13: 110000, 20: 130000 }, after: 0.005
+    },
+    {
+      id: "citylaw", label: "Law or banking, City",
+      note: "The top of the graduate market — a training contract or an analyst seat in the City.",
+      points: { 1: 60000, 3: 95000, 6: 130000, 10: 165000, 18: 200000 }, after: 0.005
     }
   ];
 
@@ -266,8 +243,9 @@
     }
 
     // A profession: real progression along the curve, inflation on top.
-    var career = CAREERS.filter(function (c) { return c.id === p.career; })[0] || CAREERS[1];
-    if (!career.points) career = CAREERS[1];
+    // A profile saved before the list was trimmed may name a path that has
+    // since gone; fall back rather than throwing.
+    var career = CAREERS.filter(function (c) { return c.id === p.career; })[0] || CAREERS[2];
     for (var k = 0; k < n; k++) out[start + k] = toCash(careerReal(career, k + 1), k);
     return out;
   }
@@ -425,7 +403,7 @@
     { id: "E", colour: "var(--sE)" }
   ];
 
-  var SEED_CAREERS = ["grad", "medicine", "creative", "engineering", "citylaw"];
+  var SEED_CAREERS = ["grad", "medicine", "creative", "tech", "citylaw"];
 
   function blankScenario(i) {
     return {
@@ -1775,7 +1753,16 @@
         state.incomeMode = data.state.incomeMode || "predict";
         state.manual = data.state.manual || {};
         state.manualYears = data.state.manualYears || 12;
-        if (Array.isArray(data.state.scen) && data.state.scen.length === SCEN_META.length) state.scen = data.state.scen;
+        if (Array.isArray(data.state.scen) && data.state.scen.length === SCEN_META.length) {
+          state.scen = data.state.scen;
+          // A profile saved before the path list was trimmed may name one that
+          // has gone. Move it to the nearest thing rather than leaving it
+          // pointing at nothing.
+          state.scen.forEach(function (s) {
+            var known = CAREERS.some(function (c) { return c.id === s.career; });
+            if (!known) s.career = "grad";
+          });
+        }
         if (typeof data.state.active === "number") state.active = data.state.active;
         if (typeof data.state.showNoLoan === "boolean") state.showNoLoan = data.state.showNoLoan;
         if (typeof data.state.panelOpen === "boolean") state.panelOpen = data.state.panelOpen;

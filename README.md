@@ -50,7 +50,7 @@ There are four ways to state an income, and a profile can use any of them:
 
 | | |
 | --- | --- |
-| **Profession** | One of twelve career curves — doctor, engineer, teacher, nurse, solicitor, City law, software, accountancy, civil service, arts, low-earning |
+| **Profession** | One of six career curves, chosen to span the range of outcomes rather than the range of job titles |
 | **Start + growth** | A starting salary and a percentage a year, taken at face value in cash |
 | **5-year bands** | What you expect to earn in each five-year stretch, in today's money, with inflation added on top |
 | **Year by year** | Every year, yours to set — £0 for a career break |
