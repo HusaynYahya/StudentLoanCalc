@@ -734,6 +734,47 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * WHAT IT COSTS TO SETTLE, IN ANY GIVEN YEAR
+   *
+   * Clearing the balance is not a single option but one per year, and they do
+   * not cost the same. Settle early and you hand over a big balance but escape
+   * every future deduction; settle late and you have already paid much of it
+   * anyway. The cheapest year is rarely the first, and on a loan heading for
+   * write-off there is no good year at all.
+   *
+   * Cost of settling at the start of year Y, in the money of the base year:
+   *   everything repaid before Y, discounted, plus the balance standing at Y.
+   * -------------------------------------------------------------------- */
+
+  function settleCosts(r, opts) {
+    var s = opts && opts.savings != null ? opts.savings : 0.045;
+    var repaying = r.years.filter(function (y) { return y.phase === "repaying"; });
+    if (!repaying.length) return { years: [], best: null, never: 0 };
+
+    var baseYear = r.years[0].taxYear;
+    var pv = function (v, year) { return v / Math.pow(1 + s, year - baseYear); };
+
+    var out = [], paidSoFar = 0;
+    repaying.forEach(function (y) {
+      out.push({
+        taxYear: y.taxYear,
+        label: y.label,
+        balance: y.openingBalance,
+        cost: paidSoFar + pv(y.openingBalance, y.taxYear)
+      });
+      paidSoFar += pv(y.repaid + y.voluntary, y.taxYear + 0.5);
+    });
+
+    // Never settling at all: just the repayment stream, which for a loan that
+    // is written off stops well short of the balance.
+    var never = paidSoFar;
+    out.push({ taxYear: null, label: "never settle", balance: 0, cost: never });
+
+    var best = out.reduce(function (m, c) { return c.cost < m.cost ? c : m; }, out[0]);
+    return { years: out, best: best, never: never };
+  }
+
+  /* ---------------------------------------------------------------------- *
    * PUBLIC ENTRY POINT
    * -------------------------------------------------------------------- */
 
@@ -754,6 +795,7 @@
         savings: a.savings,
         inflation: a.inflation
       }),
+      settle: settleCosts(combined, { savings: a.savings }),
       assumptions: a
     };
   }
@@ -852,6 +894,7 @@
     simulateLoan: simulateLoan,
     opportunity: opportunity,
     breakEvenSavings: breakEvenSavings,
+    settleCosts: settleCosts,
     thresholdFor: thresholdFor,
     upperThresholdFor: upperThresholdFor,
     interestRate: interestRate,

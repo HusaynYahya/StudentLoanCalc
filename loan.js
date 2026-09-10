@@ -403,13 +403,13 @@
     { id: "E", colour: "var(--sE)" }
   ];
 
-  var SEED_CAREERS = ["grad", "medicine", "creative", "tech", "citylaw"];
-
   function blankScenario(i) {
     return {
-      on: i < 2,                       // A and B on to begin with — it is a comparison
+      // Only the first is filled in. The rest are empty until asked for, so
+      // the list does not arrive pre-loaded with four opinions.
+      on: i === 0,
       mode: "career",                  // career | growth | bands | manual
-      career: SEED_CAREERS[i] || "grad",
+      career: i === 0 ? "grad" : null,
       startSalary: 30000,
       growth: 4,
       bands: [28000, 36000, 44000, 50000, 54000, 56000, 56000, 56000],
@@ -424,7 +424,7 @@
   // Move the active scenario's settings into the shared controls.
   function loadScenario() {
     var s = state.scen[state.active];
-    $("career").value = s.career;
+    $("career").value = s.career || "";
     $("startSalary").value = s.startSalary;
     $("salaryGrowth").value = s.growth;
     $("plan").value = s.plan;
@@ -436,6 +436,10 @@
     syncSliders();
     markCareer();
     var tag = SCEN_META[state.active].id;
+    if ($("incomeLede")) {
+      $("incomeLede").textContent =
+        "Use one of the four methods below to model Income " + tag + " over time.";
+    }
     // Tint the whole panel to the scenario being edited, so it is never
     // ambiguous which of the lines on the chart a slider is moving.
     var panel = document.querySelector(".panel");
@@ -524,7 +528,11 @@
         var lit = state.scen.filter(function (s) { return s.on; }).length;
         if (state.scen[j].on && lit <= 1) return;      // never leave the charts empty
         state.scen[j].on = !state.scen[j].on;
-        if (state.scen[j].on) { state.active = j; loadScenario(); }
+        if (state.scen[j].on) {
+          if (!state.scen[j].career) state.scen[j].career = "grad";
+          state.active = j;
+          loadScenario();
+        }
         markScens(); run();
         return;
       }
@@ -532,6 +540,7 @@
         var i = Number(pick.dataset.pick);
         state.active = i;
         if (!state.scen[i].on) state.scen[i].on = true;
+        if (!state.scen[i].career) state.scen[i].career = "grad";
         loadScenario(); markScens(); run();
       }
     });
@@ -615,6 +624,7 @@
   }
 
   function scenarioName(s) {
+    if (!s.career && s.mode === "career") return "";      // not chosen yet
     if (s.mode === "growth") return gbpShort(s.startSalary) + " +" + s.growth + "%";
     if (s.mode === "bands") return gbpShort(s.bands[0]) + " \u2192 " + gbpShort(s.bands[s.bands.length - 1]);
     if (s.mode === "manual") return "typed by year";
@@ -622,70 +632,258 @@
     return c ? c.label : "Career";
   }
 
+  /* ---- the whole life on one strip ---------------------------------------- *
+   * Study, the gap before work, the working years, any breaks, and the two
+   * dates the law fixes: when repayments fall due and when the balance is
+   * cancelled. Blocked out by year so the shape of a life is visible at a
+   * glance rather than assembled from six separate number boxes.
+   * ---------------------------------------------------------------------- */
+
+  var BAND = {
+    ug:    { fill: "var(--info)",  label: "Undergraduate" },
+    pg:    { fill: "var(--sC)",    label: "Postgraduate" },
+    gap:   { fill: "var(--ink-4)", label: "Neither studying nor working" },
+    work:  { fill: "var(--good)",  label: "Working" },
+    brk:   { fill: "var(--bad)",   label: "Break in employment" },
+    after: { fill: "var(--bg-5)",  label: "After the loan ends" }
+  };
+
+  function renderTimeline(sim) {
+    var host = $("timelineChart");
+    if (!host) return;
+    if (state.loanMode === "balance") {
+      host.innerHTML = "";
+      $("timelineKey").innerHTML = "";
+      $("timelineNote").textContent =
+        "The timeline needs a course to draw. Switch the loan to Course to set one out.";
+      return;
+    }
+
+    var t = timeline();
+    var p = state.scen[state.active];
+    var repayFrom = repayStartYear();
+    var wall = repayFrom + E.RULES[p.plan].writeOffYears;
+    var cleared = sim.combined.everRepaidInFull && sim.combined.clearedLabel
+      ? Number(sim.combined.clearedLabel.slice(0, 4)) + 1 : null;
+    var stop = cleared || wall;
+
+    var from = t.ugStart, to = Math.max(stop, t.workStart + 1);
+    var span = Math.max(1, to - from);
+
+    // One classification per year, so overlapping rules resolve once here
+    // rather than three times in the drawing.
+    var kindOf = function (y) {
+      if (y >= t.ugStart && y < t.ugEnds) return "ug";
+      if (t.pg && y >= t.pgStart && y < t.pgEnds) return "pg";
+      if (y >= stop) return "after";
+      if (y < t.workStart) return "gap";
+      if (inBreak(p, y)) return "brk";
+      return "work";
+    };
+
+    var W = 760, ml = 0, mr = 0, iw = W, top = 34, barH = 34, H = top + barH + 62;
+    var x = function (y) { return ((y - from) / span) * iw; };
+
+    var blocks = "", runStart = from, runKind = kindOf(from);
+    var flush = function (endYear) {
+      var w = x(endYear) - x(runStart);
+      if (w <= 0) return;
+      var b = BAND[runKind];
+      blocks += '<rect x="' + x(runStart).toFixed(1) + '" y="' + top + '" width="' + w.toFixed(1) +
+        '" height="' + barH + '" fill="' + b.fill + '" opacity="' + (runKind === "after" ? ".5" : ".85") + '"/>';
+      // Name the block inside it when there is room.
+      if (w > 62) {
+        blocks += '<text x="' + (x(runStart) + w / 2).toFixed(1) + '" y="' + (top + barH / 2 + 4) +
+          '" text-anchor="middle" font-size="10.5" font-weight="700" fill="' +
+          (runKind === "after" ? "var(--ink-3)" : "#0b0e13") + '">' +
+          (runKind === "ug" ? "UNDERGRAD" : runKind === "pg" ? "POSTGRAD" :
+           runKind === "brk" ? "BREAK" : runKind === "gap" ? "GAP" :
+           runKind === "work" ? "WORKING" : "LOAN GONE") + "</text>";
+      }
+    };
+    for (var y = from + 1; y <= to; y++) {
+      var k = y < to ? kindOf(y) : null;
+      if (k !== runKind) { flush(y); runStart = y; runKind = k; }
+    }
+
+    // The years along the bottom, thinned so they never collide.
+    var every = Math.max(1, Math.ceil(span / 14));
+    var ticks = "";
+    for (var ty = from; ty <= to; ty += every) {
+      ticks += '<line x1="' + x(ty).toFixed(1) + '" y1="' + (top + barH) + '" x2="' + x(ty).toFixed(1) +
+        '" y2="' + (top + barH + 5) + '" stroke="var(--line-2)" stroke-width="1"/>' +
+        '<text x="' + x(ty).toFixed(1) + '" y="' + (top + barH + 18) +
+        '" text-anchor="middle" font-size="10.5" fill="var(--ink-4)">' + ty + "</text>";
+    }
+
+    // The two dates the law fixes, marked above the strip.
+    var flag = function (year, text, colour) {
+      if (year < from || year > to) return "";
+      var fx = x(year);
+      var atEnd = fx > iw - 90, atStart = fx < 90;
+      var anchor = atEnd ? "end" : (atStart ? "start" : "middle");
+      // Keep the caption off the very edge, where it would be clipped.
+      var tx = atEnd ? Math.min(fx, iw - 2) : (atStart ? Math.max(fx, 2) : fx);
+      return '<line x1="' + fx.toFixed(1) + '" y1="' + (top - 14) + '" x2="' + fx.toFixed(1) +
+        '" y2="' + (top + barH) + '" stroke="' + colour + '" stroke-width="1.5" stroke-dasharray="3 3"/>' +
+        '<text x="' + tx.toFixed(1) + '" y="' + (top - 19) + '" text-anchor="' + anchor +
+        '" font-size="10.5" font-weight="700" fill="' + colour + '">' + text + "</text>";
+    };
+
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="The course, the working years and the loan, by year">' +
+      blocks + ticks +
+      flag(repayFrom, "repayments due", "var(--warn)") +
+      flag(stop, cleared ? "cleared" : "written off", cleared ? "var(--good)" : "var(--bad)") +
+      "</svg>";
+
+    var used = {};
+    for (var uy = from; uy < to; uy++) used[kindOf(uy)] = true;
+    $("timelineKey").innerHTML = Object.keys(BAND).filter(function (k) { return used[k]; })
+      .map(function (k) { return '<i style="color:' + BAND[k].fill + '">' + BAND[k].label + "</i>"; }).join("");
+
+    var brk = breaksOf(p);
+    $("timelineNote").innerHTML =
+      "Studying " + t.ugStart + "\u2013" + t.ugEnds +
+      (t.pg ? ", then again " + t.pgStart + "\u2013" + t.pgEnds : "") +
+      ". Working from <b>" + t.workStart + "</b>" +
+      (brk.length ? ", with " + brk.length + (brk.length === 1 ? " break" : " breaks") : "") +
+      ". Repayments fall due from April <b>" + repayFrom + "</b>" +
+      (cleared ? " and the loan clears in <b>" + sim.combined.clearedLabel + "</b>."
+               : " and whatever is left is written off in <b>" + sim.combined.writeOffLabel + "</b>.");
+  }
+
+  /* ---- how much of the answer is the guess? ------------------------------ *
+   * A tornado: one bar per unknowable, spanning the outcome from its low case
+   * to its high, sorted widest first. The point is not the numbers but the
+   * lengths — when one bar is twenty times another, the whole forecast turns
+   * on that one figure and the rest is decoration.
+   * ---------------------------------------------------------------------- */
+
   function renderSensitivity(sim) {
     var base = scenario();
     var a = sim.assumptions;
 
     var runWith = function (override) {
-      var sc = {
-        loans: base.loans,
-        salaries: base.salaries,
-        overpayment: base.overpayment,
+      var r = E.simulate({
+        loans: base.loans, salaries: base.salaries, overpayment: base.overpayment,
         assumptions: Object.assign({}, a, override)
-      };
-      var r = E.simulate(sc).combined;
+      }).combined;
       return {
         repaid: r.totalRepaid,
-        real: r.totalRealRepaid,
         cleared: r.everRepaidInFull,
         when: r.everRepaidInFull ? r.clearedLabel : r.writeOffLabel,
         writtenOff: r.writtenOff || 0
       };
     };
 
-    var rows = [
-      {
-        title: "If the thresholds rise by",
-        why: "Below your pay rises, more of your salary falls above the threshold every year.",
-        cases: [
-          { label: pct(a.inflation - 0.01), o: { thresholdGrowth: a.inflation - 0.01 } },
-          { label: pct(a.thresholdGrowth) + " — as set", o: {}, current: true },
-          { label: pct(a.inflation) + " — with inflation", o: { thresholdGrowth: a.inflation } }
-        ]
-      },
-      {
-        title: "If RPI turns out to be",
-        why: {
-          plan5: "RPI sets the interest, and on Plan 5 nothing else does.",
-          plan2: "RPI is the floor of Plan 2's sliding scale, which runs up to RPI + 3%.",
-          plan1: "RPI sets the rate unless the base rate + 1% is lower, which caps it.",
-          plan4: "RPI sets the rate unless the base rate + 1% is lower, which caps it."
-        }[$("plan").value] || "RPI sets the interest rate.",
-        cases: [
-          { label: pct(Math.max(0, a.rpi - 0.015)), o: { rpi: Math.max(0, a.rpi - 0.015) } },
-          { label: pct(a.rpi) + " — as set", o: {}, current: true },
-          { label: pct(a.rpi + 0.015), o: { rpi: a.rpi + 0.015 } }
-        ]
-      }
+    var planWhy = {
+      plan5: "RPI sets the interest, and on Plan 5 nothing else does.",
+      plan2: "RPI is the floor of Plan 2's sliding scale, which runs to RPI + 3%.",
+      plan1: "RPI sets the rate unless the base rate + 1% is lower.",
+      plan4: "RPI sets the rate unless the base rate + 1% is lower."
+    }[profile().plan] || "RPI sets the interest rate.";
+
+    var specs = [
+      { title: "RPI", why: planWhy,
+        lo: { label: pct(Math.max(0, a.rpi - 0.015)), o: { rpi: Math.max(0, a.rpi - 0.015) } },
+        hi: { label: pct(a.rpi + 0.015), o: { rpi: a.rpi + 0.015 } },
+        now: pct(a.rpi) + " as set" },
+      { title: "Threshold uprating", why: "Below your pay rises, more of your salary falls above it every year.",
+        lo: { label: pct(Math.max(0, a.inflation - 0.01)), o: { thresholdGrowth: Math.max(0, a.inflation - 0.01) } },
+        hi: { label: pct(a.inflation), o: { thresholdGrowth: a.inflation } },
+        now: pct(a.thresholdGrowth) + " as set" },
+      { title: "Your pay", why: "A fifth either way on everything you ever earn.",
+        lo: { label: "\u2212" + "20%", o: {}, salaryScale: 0.8 },
+        hi: { label: "+20%", o: {}, salaryScale: 1.2 },
+        now: "as modelled" },
+      { title: "Inflation", why: "Drags the cash salaries, and with them the whole ledger.",
+        lo: { label: pct(Math.max(0, a.inflation - 0.015)), o: { inflation: Math.max(0, a.inflation - 0.015) } },
+        hi: { label: pct(a.inflation + 0.015), o: { inflation: a.inflation + 0.015 } },
+        now: pct(a.inflation) + " as set" }
     ];
 
-    var html = "";
-    rows.forEach(function (row) {
-      html += "<tbody><tr class=\"sens-head\"><th colspan=\"3\" scope=\"colgroup\">" + row.title +
-        " <span>" + row.why + "</span></th></tr><tr>";
-      row.cases.forEach(function (c) {
-        var res = runWith(c.o);
-        html += "<td class=\"sens-cell" + (c.current ? " is-current" : "") + "\">" +
-          "<span class=\"sens-if\">" + c.label + "</span>" +
-          "<span class=\"sens-amt\">" + gbp(res.repaid) + "</span>" +
-          "<span class=\"sens-note\">repaid — " +
-          (res.cleared ? "cleared in " + res.when : gbp(res.writtenOff) + " written off in " + res.when) +
-          "</span></td>";
-      });
-      html += "</tr></tbody>";
-    });
-    $("sensTable").innerHTML = html;
+    var mid = runWith({});
+    var bars = specs.map(function (sp) {
+      var scaled = function (side) {
+        if (side.o && side.o.inflation != null) {
+          // Inflation drives the salary curve itself, so the line has to be
+          // rebuilt rather than the assumption merely swapped underneath it.
+          var a2 = Object.assign({}, a, side.o);
+          var r2 = E.simulate({ loans: base.loans, salaries: salaries(a2),
+                                overpayment: base.overpayment, assumptions: a2 }).combined;
+          return { repaid: r2.totalRepaid, cleared: r2.everRepaidInFull,
+                   when: r2.everRepaidInFull ? r2.clearedLabel : r2.writeOffLabel,
+                   writtenOff: r2.writtenOff || 0 };
+        }
+        if (!side.salaryScale) return runWith(side.o);
+        // Scaling pay needs the salary line rebuilt, not an assumption changed.
+        var sal = {};
+        Object.keys(base.salaries).forEach(function (k) { sal[k] = base.salaries[k] * side.salaryScale; });
+        var r = E.simulate({ loans: base.loans, salaries: sal, overpayment: base.overpayment,
+                             assumptions: a }).combined;
+        return { repaid: r.totalRepaid, cleared: r.everRepaidInFull,
+                 when: r.everRepaidInFull ? r.clearedLabel : r.writeOffLabel,
+                 writtenOff: r.writtenOff || 0 };
+      };
+      var lo = scaled(sp.lo), hi = scaled(sp.hi);
+      var a1 = Math.min(lo.repaid, hi.repaid), b1 = Math.max(lo.repaid, hi.repaid);
+      return { title: sp.title, why: sp.why, now: sp.now,
+               loLabel: sp.lo.label, hiLabel: sp.hi.label,
+               lo: lo, hi: hi, min: a1, max: b1, range: b1 - a1 };
+    }).sort(function (x, y) { return y.range - x.range; });
+
+    // A common axis, so bar lengths can be compared against each other.
+    var lo = bars.reduce(function (m, b) { return Math.min(m, b.min); }, mid.repaid);
+    var hi = bars.reduce(function (m, b) { return Math.max(m, b.max); }, mid.repaid);
+    var pad = (hi - lo) * 0.08 || 1000;
+    lo = Math.max(0, lo - pad); hi = hi + pad;
+
+    var W = 760, rowH = 54, padT = 28, labelW = 168, right = 18;
+    var iw = W - labelW - right;
+    var H = padT + bars.length * rowH + 26;
+    var x = function (v) { return labelW + ((v - lo) / (hi - lo)) * iw; };
+
+    var body = bars.map(function (b, i) {
+      var y = padT + i * rowH;
+      var x1 = x(b.min), x2 = x(b.max);
+      return '<text x="0" y="' + (y + 13) + '" font-size="12.5" font-weight="600" fill="var(--ink-2)">' + b.title + "</text>" +
+        '<text x="0" y="' + (y + 28) + '" font-size="10.5" fill="var(--ink-4)">' + b.now + "</text>" +
+        '<rect x="' + x1.toFixed(1) + '" y="' + (y + 2) + '" width="' + Math.max(2, x2 - x1).toFixed(1) +
+          '" height="20" rx="3" fill="var(--warn)" opacity=".55"/>' +
+        '<text x="' + (x1 - 7).toFixed(1) + '" y="' + (y + 17) + '" text-anchor="end" font-size="11" ' +
+          'font-family="ui-monospace,monospace" fill="var(--ink-3)">' + gbpShort(b.min) + "</text>" +
+        '<text x="' + (x2 + 7).toFixed(1) + '" y="' + (y + 17) + '" font-size="11" ' +
+          'font-family="ui-monospace,monospace" fill="var(--ink-3)">' + gbpShort(b.max) + "</text>" +
+        (x2 - x1 > 70
+          ? '<text x="' + x1.toFixed(1) + '" y="' + (y + 36) + '" font-size="10" fill="var(--ink-4)">' + b.loLabel + "</text>" +
+            '<text x="' + x2.toFixed(1) + '" y="' + (y + 36) + '" text-anchor="end" font-size="10" fill="var(--ink-4)">' + b.hiLabel + "</text>"
+          : '<text x="' + ((x1 + x2) / 2).toFixed(1) + '" y="' + (y + 36) + '" text-anchor="middle" font-size="10" fill="var(--ink-4)">' +
+            b.loLabel + " \u2013 " + b.hiLabel + "</text>");
+    }).join("");
+
+    // Where the answer sits on today's assumptions.
+    var nowX = x(mid.repaid);
+    var spine = '<line x1="' + nowX.toFixed(1) + '" y1="' + (padT - 12) + '" x2="' + nowX.toFixed(1) +
+      '" y2="' + (padT + bars.length * rowH - 8) + '" stroke="var(--good)" stroke-width="1.5"/>' +
+      '<text x="' + nowX.toFixed(1) + '" y="' + (padT - 17) + '" text-anchor="middle" font-size="11.5" ' +
+      'font-weight="700" fill="var(--good)">' + gbp(mid.repaid) + " as set</text>";
+
+    $("sensChart").innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="How far each assumption moves the total repaid">' +
+      spine + body + "</svg>";
+
+    var widest = bars[0], narrowest = bars[bars.length - 1];
+    $("sensNote").innerHTML = widest.range > narrowest.range * 3
+      ? "<b>" + widest.title + "</b> decides this forecast. Moving it across the range shown swings the " +
+        "total by <b>" + gbp(widest.range) + "</b>, against <b>" + gbp(narrowest.range) + "</b> for <b>" +
+        narrowest.title.toLowerCase() + "</b> — so the honest error bar on every other figure on this " +
+        "page is roughly the length of that top bar."
+      : "No single assumption dominates: the four move the total by between <b>" + gbp(narrowest.range) +
+        "</b> and <b>" + gbp(widest.range) + "</b>. Treat any figure on this page as carrying at least " +
+        "that much uncertainty.";
   }
+
 
   /* ---------------------------------------------------------------------- *
    * CHARTS
@@ -1116,6 +1314,8 @@
     var sim = runs.filter(function (s) { return s.index === state.active; })[0] || runs[0];
     var r = sim.combined, o = sim.opportunity;
     var baseYear = r.years.length ? r.years[0].label : "today";
+    var endYearLabel = r.years.length
+      ? E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1) : "the end";
 
     var boxes = [
       {
@@ -1134,11 +1334,13 @@
         tone: "cool"
       },
       {
-        k: "Growth given up",
-        v: gbp(o.foregoneGrowth),
+        k: "Growth given up, in " + baseYear + " money",
+        v: gbp(o.realForegoneGrowth),
         sub: o.foregoneGrowth > 0
-          ? "those repayments saved at " + pct(o.savingsRate) + " would have become " +
-            gbp(o.fvRepayments) + " — this is the part you never earned"
+          ? "saved at " + pct(o.savingsRate) + " those repayments would have become " +
+            gbp(o.fvRepayments) + " by " + endYearLabel + " — " + gbp(o.foregoneGrowth) +
+            " more than you handed over, which is " + gbp(o.realForegoneGrowth) + " in " +
+            baseYear + " money"
           : "nothing is deducted on this profile, so nothing is forfeited",
         tone: "warm"
       }
@@ -1297,6 +1499,7 @@
     $("recBox").className = "rec" + (rec ? " is-" + rec.tone : " is-empty");
 
     renderOppChart(sim);
+    renderSettleChart(sim);
 
     $("oppVerdict").innerHTML = o.years === 0
       ? "Nothing is ever deducted on this profile, so there is nothing to weigh against saving."
@@ -1313,6 +1516,69 @@
             : ".";
           return cash + priced + clear + wins;
         })();
+  }
+
+  /* ---- when, if ever, is it worth settling? ------------------------------- *
+   * Every year is its own option, and they do not cost the same: settle early
+   * and you hand over a large balance but escape all the deductions after it;
+   * settle late and you have paid most of it anyway. The curve usually dips
+   * somewhere in the middle — or slopes away entirely, on a loan that is going
+   * to be written off.
+   * ---------------------------------------------------------------------- */
+
+  function renderSettleChart(sim) {
+    var st = sim.settle;
+    var host = $("settleChart");
+    if (!host) return;
+    if (!st || st.years.length < 3) { host.innerHTML = ""; $("settleKey").innerHTML = ""; return; }
+
+    var pts = st.years.filter(function (c) { return c.taxYear != null; })
+      .map(function (c) { return { taxYear: c.taxYear, label: c.label, v: c.cost }; });
+    var never = st.never;
+
+    var max = Math.max(never, pts.reduce(function (m, p) { return Math.max(m, p.v); }, 0));
+    var s = niceScale(max);
+    var f = frame({ years: pts, xMin: pts[0].taxYear, xMax: pts[pts.length - 1].taxYear,
+                    top: s.top, step: s.step, fmt: gbpShort, w: 760, h: 250,
+                    title: "What it costs to settle the balance in each year" });
+
+    // Never settling is a flat reference: the repayment stream and nothing else.
+    var neverLine = '<line x1="' + f.ml + '" y1="' + f.y(never).toFixed(1) + '" x2="' + (f.W - 14) +
+      '" y2="' + f.y(never).toFixed(1) + '" stroke="var(--ink-3)" stroke-width="1.75" stroke-dasharray="5 4"/>' +
+      '<text x="' + (f.W - 18) + '" y="' + (f.y(never) - 8).toFixed(1) +
+      '" text-anchor="end" font-size="11" font-weight="600" fill="var(--ink-3)">Never settle \u2014 ' +
+      gbp(never) + "</text>";
+
+    var best = st.best;
+    var mark = "";
+    if (best && best.taxYear != null) {
+      mark = '<circle cx="' + f.x(best.taxYear).toFixed(1) + '" cy="' + f.y(best.cost).toFixed(1) +
+        '" r="4.5" fill="var(--good)"/>' +
+        '<text x="' + f.x(best.taxYear).toFixed(1) + '" y="' + (f.y(best.cost) - 12).toFixed(1) +
+        '" text-anchor="middle" font-size="11" font-weight="600" fill="var(--good)">cheapest \u00b7 ' +
+        best.label + "</text>";
+    }
+
+    $("settleChart").innerHTML = f.open +
+      '<path d="' + line(pts, f) + '" fill="none" stroke="var(--warn)" stroke-width="2.25"/>' +
+      neverLine + mark + f.close;
+
+    var first = pts[0];
+    $("settleKey").innerHTML =
+      '<i class="k-int">Cost of settling that year, in ' + E.taxYearLabel(sim.combined.years[0].taxYear) + " money</i>" +
+      '<i style="color:var(--ink-3)">Never settling</i>' +
+      '<i style="color:var(--ink-4)">settling in ' + first.label + " costs " + gbp(first.cost) + "</i>";
+
+    $("settleNote").innerHTML = (best && best.taxYear == null)
+      ? "There is no good year to settle this one. Every year costs more than simply letting the " +
+        "deductions run, because <b>" + gbp(sim.combined.writtenOff || 0) + "</b> of it is written " +
+        "off in " + sim.combined.writeOffLabel + " and settling buys out a debt you were never going to pay."
+      : (best
+        ? "The cheapest moment to clear it is <b>" + best.label + "</b>, when the balance stands at <b>" +
+          gbp(best.balance) + "</b>. Settling then costs <b>" + gbp(best.cost) + "</b> against <b>" +
+          gbp(never) + "</b> for letting the deductions run \u2014 a difference of <b>" +
+          gbp(Math.abs(never - best.cost)) + "</b>."
+        : "");
   }
 
   /* ---- the two choices, racing --------------------------------------------
@@ -1446,6 +1712,7 @@
 
   function renderAllCharts(runs) {
     renderBigs(runs);
+    renderTimeline(runs.filter(function (s) { return s.index === state.active; })[0] || runs[0]);
     renderFacts(runs);
     renderChart(runs);
     renderSalaryChart(runs);

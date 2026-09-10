@@ -189,6 +189,7 @@ select {
 select:hover { border-color: var(--ink-4); }
 
 .note { margin: .4rem 0 0; font-size: .755rem; line-height: 1.5; color: var(--ink-4); }
+.note--lede { margin: -.35rem 0 .85rem; color: var(--ink-3); }
 .readout {
   margin: .85rem 0 0; padding: .55rem .65rem;
   background: var(--bg-4); border-left: 2px solid var(--good);
@@ -663,3 +664,9 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .rec.is-even .rec__v { color: var(--info); }
 .rec__b { margin: .45rem 0 0; font-size: .82rem; line-height: 1.6; color: var(--ink-3); max-width: 82ch; }
 .rec__b b { color: var(--ink); font-family: var(--num); font-weight: 600; }
+
+.focus__sub {
+  margin: 2rem 0 .9rem; padding-top: 1.2rem; border-top: 1px solid var(--line);
+  font-size: .64rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-4); font-weight: 700;
+}

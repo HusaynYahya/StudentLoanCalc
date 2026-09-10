@@ -6,7 +6,7 @@
 <meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
 <meta name="color-scheme" content="dark" />
 <title>Student loan · repayment model</title>
-<link rel="stylesheet" href="loan.css?v=0b78d442" />
+<link rel="stylesheet" href="loan.css?v=023ee557" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -42,6 +42,7 @@
         <div class="grp__head">
           <h2>Income <b class="who" id="whoIncome">A</b></h2>
         </div>
+        <p class="note note--lede" id="incomeLede"></p>
 
         <div class="seg seg--wrap" role="tablist" aria-label="How to state the income">
           <button type="button" role="tab" id="tab-career" aria-controls="pane-career" aria-selected="true" data-mode="career">Profession</button>
@@ -289,6 +290,14 @@
     <section class="cards">
 
       <figure class="card card--wide">
+        <figcaption><h3>The years, blocked out</h3>
+          <p>Study, the gap before work, the working years and any breaks — with the two dates the law fixes.</p></figcaption>
+        <div id="timelineChart" class="viz"></div>
+        <p class="key" id="timelineKey"></p>
+        <p class="note" id="timelineNote"></p>
+      </figure>
+
+      <figure class="card card--wide">
         <figcaption><h3>The income profiles</h3>
           <p>Every profile over time, each in its own colour, against the repayment threshold. You pay 9% of the gap above it.</p></figcaption>
         <div id="salaryChart" class="viz"></div>
@@ -338,6 +347,11 @@
         <div id="oppChart" class="viz"></div>
         <p class="key" id="oppKey"></p>
         <p class="note" id="oppVerdict"></p>
+
+        <h4 class="focus__sub">If you settled it early — what each year would cost</h4>
+        <div id="settleChart" class="viz"></div>
+        <p class="key" id="settleKey"></p>
+        <p class="note" id="settleNote"></p>
       </figure>
 
       <figure class="card card--wide">
@@ -349,8 +363,9 @@
 
       <figure class="card card--wide">
         <figcaption><h3>How much of this is guesswork</h3>
-          <p>The same scenario re-run with each unknowable moved. The spread is the honest error bar.</p></figcaption>
-        <table class="sens" id="sensTable"></table>
+          <p>Each bar is the same scenario re-run with one assumption moved low and high. Longer bar, bigger guess.</p></figcaption>
+        <div id="sensChart" class="viz"></div>
+        <p class="note" id="sensNote"></p>
       </figure>
 
       <figure class="card card--wide">
@@ -425,7 +440,7 @@
   </main>
 </div>
 
-<script src="engine.js?v=0b78d442"></script>
-<script src="loan.js?v=0b78d442" defer></script>
+<script src="engine.js?v=023ee557"></script>
+<script src="loan.js?v=023ee557" defer></script>
 </body>
 </html>
