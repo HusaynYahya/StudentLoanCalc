@@ -624,6 +624,7 @@
       return { lump: r.balanceAtRepayStart || 0, years: 0, savingsRate: s,
                fvRepayments: 0, fvLump: r.balanceAtRepayStart || 0,
                paidOut: 0, foregoneGrowth: 0, realForegoneGrowth: 0,
+               baseYear: null, pvRepayments: 0, pvUpfront: 0, pvLump: 0,
                upfrontPaid: 0, fvUpfront: 0, realFvUpfront: 0, cheapest: null, breakEven: null,
                clearingSaves: -(r.balanceAtRepayStart || 0), clearingIsBetter: false,
                realFvRepayments: 0, realFvLump: r.balanceAtRepayStart || 0,
@@ -659,6 +660,24 @@
     // to part with.
     var fvLump = lump * Math.pow(1 + s, span);
     var paidOut = repaying.reduce(function (t, y) { return t + y.repaid + y.voluntary; }, 0);
+
+    // The same three sums discounted back to the year the loan was taken out.
+    // Ranking is identical to the forward view — it is the same numbers scaled
+    // by one constant — but a figure in money the reader is standing in is far
+    // easier to weigh than one in 2057's.
+    var baseYear = r.years.length ? r.years[0].taxYear : startYear;
+    var toBase = function (v, year) { return v / Math.pow(1 + s, year - baseYear); };
+
+    var pvRepayments = 0;
+    repaying.forEach(function (y) {
+      pvRepayments += toBase(y.repaid + y.voluntary, y.taxYear + 0.5);
+    });
+    var pvUpfront = 0;
+    r.years.forEach(function (y) {
+      if (y.borrowed > 0) pvUpfront += toBase(y.borrowed, y.taxYear + 0.5);
+    });
+    var pvLump = toBase(lump, startYear);
+    if (pvUpfront <= 0) pvUpfront = pvLump;
     var foregoneGrowth = fvRepayments - paidOut;
 
     // The third life: never borrow, and find the fees in cash while you study.
@@ -684,6 +703,10 @@
       fvRepayments: fvRepayments,
       fvLump: fvLump,
       paidOut: paidOut,
+      baseYear: baseYear,
+      pvRepayments: pvRepayments,
+      pvUpfront: pvUpfront,
+      pvLump: pvLump,
       upfrontPaid: upfrontPaid,
       fvUpfront: fvUpfront,
       realFvUpfront: fvUpfront * deflate,

@@ -80,6 +80,21 @@ way. It moves with the tuition and the course length, because it is the cost
 of the course. In balance mode it becomes the cost of clearing what you owe
 today in one payment.
 
+## Discounting, not compounding
+
+The comparison used to carry all three options *forward* to the year the loan
+ends, which made the arithmetic right and the figures useless: £203,541 against
+£213,168, in 2057's money, about a decision you are making now.
+
+They are discounted *back* instead, to the year the loan was taken out. The
+ranking is identical — it is the same three numbers scaled by one shared
+constant — but £54,345 against £56,916 is a comparison anyone can hold in their
+head, and it is stated in money the reader is actually standing in.
+
+The lede on the table says why the options differ at all, which is the whole
+idea: money paid sooner costs more than the same money paid later, because what
+you keep can earn in the meantime.
+
 ## A recommendation, in a sentence
 
 The panel used to be a wall of figures with no conclusion drawn from them. It

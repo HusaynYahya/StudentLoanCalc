@@ -419,6 +419,33 @@ test("the track has a row per repaying year, both choices side by side", functio
   }
 });
 
+test("discounting back gives the same ranking as carrying forward", function () {
+  var o = E.simulate({
+    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
+    salaries: { 2030: 45000 }
+  }).opportunity;
+  var fwd = [o.fvRepayments, o.fvUpfront, o.fvLump];
+  var back = [o.pvRepayments, o.pvUpfront, o.pvLump];
+  var order = function (a) {
+    return a.map(function (v, i) { return i; }).sort(function (x, y) { return a[x] - a[y]; }).join("");
+  };
+  eq(order(back), order(fwd), "same order either way — it is one constant apart");
+  // And that constant is the same for all three.
+  var k = fwd[0] / back[0];
+  near(fwd[1] / back[1], k, k * 0.001, "the scaling is shared");
+  near(fwd[2] / back[2], k, k * 0.001, "by all three");
+});
+
+test("a present value is smaller than the cash it discounts", function () {
+  var o = E.simulate({
+    loans: [{ plan: "plan5", course: { years: 3, startYear: 2026, tuitionPerYear: 9790, maintenancePerYear: 10830 }, repaymentStartYear: 2030 }],
+    salaries: { 2030: 45000 }
+  }).opportunity;
+  ok(o.pvRepayments < o.paidOut, "repayments spread over decades are worth less than their sum");
+  ok(o.pvUpfront < o.upfrontPaid * 1.001, "fees paid near the base year barely discount");
+  ok(o.pvUpfront > o.upfrontPaid * 0.8, "but they are not discounted away either");
+});
+
 test("the break-even savings rate is where the two choices tie", function () {
   var mk = function (s) {
     return E.simulate({

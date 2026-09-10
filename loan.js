@@ -530,7 +530,7 @@
       return '<div class="scen" data-scen="' + i + '">' +
         '<button type="button" class="scen__pick" role="tab" aria-selected="false" data-pick="' + i + '">' +
           '<span class="scen__dot" style="background:' + m.colour + '"></span>' +
-          '<span class="scen__id">' + m.id + '</span>' +
+          '<span class="scen__id">Income ' + m.id + '</span>' +
           '<span class="scen__name" data-name="' + i + '">—</span>' +
         "</button>" +
         '<button type="button" class="scen__on" data-toggle="' + i + '" aria-pressed="false" title="Show or hide on the charts">' +
@@ -1096,9 +1096,9 @@
 
     // It clears. Now the timing argument decides, and often barely.
     var opts = [
-      { k: "repay", label: "borrow and repay as required", fv: o.fvRepayments },
-      { k: "upfront", label: "pay the fees in cash", fv: o.fvUpfront },
-      { k: "clear", label: "clear the balance today", fv: o.fvLump }
+      { k: "repay", label: "borrow and repay as required", fv: o.pvRepayments },
+      { k: "upfront", label: "pay the fees in cash", fv: o.pvUpfront },
+      { k: "clear", label: "clear the balance today", fv: o.pvLump }
     ].filter(function (c) { return c.fv > 0; }).sort(function (a, b) { return a.fv - b.fv; });
 
     var best = opts[0], worst = opts[opts.length - 1];
@@ -1113,7 +1113,7 @@
     // Under a twentieth apart is not a difference anyone should act on.
     if (margin < 0.05) {
       return { tone: "even", verdict: "Too close to call — do whichever suits you.",
-        body: "Priced at " + E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1) + ", the options " +
+        body: "In " + E.taxYearLabel(o.baseYear) + " money the options " +
               "sit within <b>" + gbp(spread) + "</b> of each other, about " + pct(margin, 0) +
               ". That is far inside the error on a forecast this long, so treat it as a wash and " +
               "decide on how much you would rather hold cash." + flip };
@@ -1123,8 +1123,9 @@
       verdict: best.k === "repay" ? "Take the loan and repay as required."
              : best.k === "clear" ? "Clear the balance as soon as you can."
              : "Pay the fees in cash if you can.",
-      body: "Priced at the same date, that comes to <b>" + gbp(best.fv) + "</b> against <b>" +
-            gbp(worst.fv) + "</b> for the dearest — <b>" + gbp(spread) + "</b> better off." + flip };
+      body: "In " + E.taxYearLabel(o.baseYear) + " money that comes to <b>" + gbp(best.fv) +
+            "</b> against <b>" + gbp(worst.fv) + "</b> for the dearest \u2014 <b>" + gbp(spread) +
+            "</b> better off." + flip };
   }
 
   /* ---- the three figures that matter most -------------------------------- *
@@ -1227,7 +1228,7 @@
     var endLabel = o.years
       ? E.taxYearLabel(r.years[r.years.length - 1].taxYear + 1)
       : "the end";
-    var g3 = "All three, priced at " + endLabel;
+    var baseLabel = o.baseYear != null ? E.taxYearLabel(o.baseYear) : "today";
 
     var peakBalance = repaying.reduce(function (m, y) {
       return Math.max(m, y.closingBalance);
@@ -1261,12 +1262,12 @@
     });
 
     var choices = [
-      { key: "repay",   k: "Borrow and repay",        cash: r.totalRepaid, fv: o.fvRepayments, real: o.realFvRepayments,
+      { key: "repay",   k: "Borrow and repay",        cash: r.totalRepaid, fv: o.pvRepayments,
         why: "spread over " + r.yearsRepaying + " years, ending " + endLabel },
-      { key: "upfront", k: "Pay the fees in cash",    cash: o.upfrontPaid, fv: o.fvUpfront,    real: o.realFvUpfront,
+      { key: "upfront", k: "Pay the fees in cash",    cash: o.upfrontPaid, fv: o.pvUpfront,
         why: "all of it while you study" },
-      { key: "clear",   k: "Clear the balance today", cash: o.lump,        fv: o.fvLump,       real: o.realFvLump,
-        why: "one payment, right now" }
+      { key: "clear",   k: "Clear the balance today", cash: o.lump,        fv: o.pvLump,
+        why: "one payment, at the start" }
     ].filter(function (c) { return c.cash > 0; })
      // With an opening balance there are no fees to find, so "pay your own
      // way" and "clear it today" are the same act — list it once.
@@ -1284,11 +1285,12 @@
     var table = choices.length < 2 ? "" :
       '<div class="fgroup fgroup--wide"><h4>Which is actually cheapest?</h4>' +
       '<p class="fgroup__lede">Money paid sooner costs you more than the same money paid later, because ' +
-      'what you keep can earn in the meantime. So each option is followed through to <b>' + endLabel +
-      "</b> \u2014 the year this loan ends \u2014 and compared there.</p>" +
+      'what you keep can earn ' + pct(o.savingsRate) + ' in the meantime. Each option is therefore ' +
+      'discounted back to <b>' + baseLabel + "</b>, so all three are stated in money you can picture " +
+      "rather than in three different decades.</p>" +
       '<div class="scroll"><table class="choices"><thead><tr><th scope="col">Option</th>' +
       '<th scope="col" class="n">You pay</th>' +
-      '<th scope="col" class="n">Real cost by ' + endLabel + "</th>" +
+      '<th scope="col" class="n">Cost in ' + baseLabel + " money</th>" +
       '<th scope="col" class="n">Difference</th>' +
       "</tr></thead><tbody>" +
       choices.map(function (c, i) {
@@ -1296,7 +1298,7 @@
         return '<tr class="' + (i === 0 ? "is-win" : "") + '">' +
           "<th scope=\"row\">" + c.k + "<span>" + c.why + "</span></th>" +
           '<td class="n">' + gbp(c.cash) + "</td>" +
-          '<td class="n lead">' + money(c.fv, c.real) + "</td>" +
+          '<td class="n lead">' + gbp(c.fv) + "</td>" +
           '<td class="n gap">' + (i === 0 ? "cheapest" : "+" + gbp(gap)) + "</td></tr>";
       }).join("") +
       "</tbody></table></div></div>";

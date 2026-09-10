@@ -433,7 +433,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 }
 .scen__pick:hover { color: var(--ink); }
 .scen__dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.scen__id { font-family: var(--num); font-size: .78rem; font-weight: 700; flex: none; }
+.scen__id { font-size: .76rem; font-weight: 700; flex: none; white-space: nowrap; }
 .scen__name {
   font-size: .74rem; color: var(--ink-4); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; min-width: 0;
