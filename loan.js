@@ -236,6 +236,7 @@
 
   var BAND_YEARS = 5;
   var BAND_COUNT = 8;               // 40 years, enough for a Plan 5 term
+  var BAND_MAX = 250000;            // how far the slider reaches; typing goes further
 
   var currentProfile = null;        // lent to scenario() for one simulate
 
@@ -506,8 +507,8 @@
         '<label for="band' + i + '">Years ' + from + "\u2013" + to + "</label>" +
         '<span class="ctl__val"><i>\u00a3</i><input type="number" id="band' + i + '" data-band="' + i +
           '" min="0" max="500000" step="500" value="' + Math.round(v) + '" /></span>' +
-        '<input type="range" tabindex="-1" aria-hidden="true" min="0" max="150000" step="1000" value="' +
-          Math.min(150000, Math.round(v)) + '" data-bandrange="' + i + '" />' +
+        '<input type="range" tabindex="-1" aria-hidden="true" min="0" max="' + BAND_MAX +
+          '" step="1000" value="' + Math.min(BAND_MAX, Math.round(v)) + '" data-bandrange="' + i + '" />' +
         "</div>";
     }).join("");
   }
@@ -1996,7 +1997,8 @@
         var bv = parseFloat(t.value);
         p.bands[Number(t.dataset.band)] = isFinite(bv) ? Math.max(0, bv) : 0;
         var mate = document.querySelector('[data-bandrange="' + t.dataset.band + '"]');
-        if (mate) mate.value = clamp(p.bands[Number(t.dataset.band)], 0, 150000);
+        if (mate) mate.value = clamp(p.bands[Number(t.dataset.band)],
+                                     Number(mate.min), Number(mate.max));
         run();
         return;
       }

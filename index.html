@@ -6,7 +6,7 @@
 <meta name="description" content="A UK student loan repayment simulator. Set a course and an income and read the whole ledger: what is deducted, what interest is added, what is paid off, and what is written off." />
 <meta name="color-scheme" content="dark" />
 <title>Student loan · repayment model</title>
-<link rel="stylesheet" href="loan.css?v=3b403d41" />
+<link rel="stylesheet" href="loan.css?v=4c1644d0" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e13'/%3E%3Cpath d='M18 70 L40 48 L57 61 L82 30' fill='none' stroke='%2335d6a4' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
 </head>
 <body>
@@ -60,7 +60,7 @@
           <div class="ctl">
             <div class="ctl__top">
               <label for="startSalary">Starting salary</label>
-              <span class="ctl__val"><i>£</i><input type="number" id="startSalary" min="0" max="500000" step="500" value="30000" data-slider="15000,150000,500" /></span>
+              <span class="ctl__val"><i>£</i><input type="number" id="startSalary" min="0" max="1000000" step="500" value="30000" data-slider="10000,250000,1000" /></span>
             </div>
           </div>
           <div class="ctl">
@@ -131,7 +131,7 @@
             <div class="ctl">
               <div class="ctl__top">
                 <label for="pglBalance">Postgraduate borrowed</label>
-                <span class="ctl__val"><i>£</i><input type="number" id="pglBalance" min="0" max="60000" step="100" value="12471" data-slider="0,30000,100" /></span>
+                <span class="ctl__val"><i>£</i><input type="number" id="pglBalance" min="0" max="200000" step="100" value="12471" data-slider="0,60000,250" /></span>
               </div>
               <p class="note">6% above £21,000, from the April after the postgraduate course ends.</p>
             </div>
@@ -148,7 +148,7 @@
           <div class="ctl">
             <div class="ctl__top">
               <label for="tuition">Tuition a year</label>
-              <span class="ctl__val"><i>£</i><input type="number" id="tuition" min="0" max="30000" step="10" value="9790" data-slider="0,12000,10" /></span>
+              <span class="ctl__val"><i>£</i><input type="number" id="tuition" min="0" max="60000" step="10" value="9790" data-slider="0,20000,50" /></span>
             </div>
           </div>
           <div class="ctl">
@@ -167,7 +167,7 @@
           <div class="ctl">
             <div class="ctl__top">
               <label for="openingBalance">Owed today</label>
-              <span class="ctl__val"><i>£</i><input type="number" id="openingBalance" min="0" max="500000" step="100" value="52000" data-slider="0,150000,500" /></span>
+              <span class="ctl__val"><i>£</i><input type="number" id="openingBalance" min="0" max="1000000" step="100" value="52000" data-slider="0,250000,1000" /></span>
             </div>
           </div>
           <div class="ctl">
@@ -200,7 +200,7 @@
         <div class="ctl">
           <div class="ctl__top">
             <label for="overpay">Overpay a month</label>
-            <span class="ctl__val"><i>£</i><input type="number" id="overpay" min="0" max="5000" step="10" value="0" data-slider="0,1000,10" /></span>
+            <span class="ctl__val"><i>£</i><input type="number" id="overpay" min="0" max="20000" step="10" value="0" data-slider="0,2000,25" /></span>
           </div>
           <p class="note">Test it first. It often buys nothing.</p>
         </div>
@@ -425,7 +425,7 @@
   </main>
 </div>
 
-<script src="engine.js?v=3b403d41"></script>
-<script src="loan.js?v=3b403d41" defer></script>
+<script src="engine.js?v=4c1644d0"></script>
+<script src="loan.js?v=4c1644d0" defer></script>
 </body>
 </html>

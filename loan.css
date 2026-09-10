@@ -153,9 +153,9 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -.01em; }
 .ctl__val input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .ctl__val input:focus { outline: none; color: var(--live); }
 .ctl__val:focus-within { border-bottom-color: var(--live); }
-.ctl__val input[id="startSalary"], .ctl__val input[id="openingBalance"] { width: 6.5ch; }
+.ctl__val input[id="startSalary"], .ctl__val input[id="openingBalance"] { width: 7.5ch; }
 .ctl__val input[id="tuition"], .ctl__val input[id="maintenance"],
-.ctl__val input[id="pglBalance"] { width: 5.6ch; }
+.ctl__val input[id="pglBalance"], .ctl__val input[id="overpay"] { width: 6.5ch; }
 
 input[type="range"] {
   -webkit-appearance: none; appearance: none;
@@ -500,7 +500,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .band { display: grid; grid-template-columns: 1fr auto; gap: .1rem .5rem; align-items: baseline; }
 .band label { font-size: .77rem; color: var(--ink-2); }
 .band .ctl__val { justify-self: end; }
-.band .ctl__val input { width: 5.6ch; }
+.band .ctl__val input { width: 7ch; }
 .band input[type="range"] { grid-column: 1 / -1; margin-top: .15rem; }
 
 /* ---- the facts bar ------------------------------------------------------ */
