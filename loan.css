@@ -724,3 +724,11 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .cal__key.is-repay { color: var(--ink-3); }
 .cal__key.k-peak { color: var(--warn); }
 .cal__key.k-cleared { color: var(--good); }
+
+/* ---- drawing an income ------------------------------------------------- */
+
+.draw { margin-top: .5rem; }
+.draw svg { display: block; width: 100%; height: auto; touch-action: none; cursor: crosshair; }
+.draw .dp { cursor: grab; }
+.draw .dp:hover { r: 6.5; }
+.draw .dp:active { cursor: grabbing; }

@@ -211,9 +211,6 @@
    * means flat in real terms rather than quietly eroding.
    * -------------------------------------------------------------------- */
 
-  var BAND_YEARS = 5;
-  var BAND_COUNT = 8;               // 40 years, enough for a Plan 5 term
-  var BAND_MAX = 250000;            // how far the slider reaches; typing goes further
 
   var currentProfile = null;        // lent to scenario() for one simulate
 
@@ -234,11 +231,9 @@
       return out;
     }
 
-    if (p.mode === "bands") {
-      for (var b = 0; b < n; b++) {
-        var band = Math.min(Math.floor(b / BAND_YEARS), p.bands.length - 1);
-        out[start + b] = toCash(Number(p.bands[band]) || 0, b);
-      }
+    if (p.mode === "bands") {                 // the drawn curve
+      var pts = pointsOf(p);
+      for (var b = 0; b < n; b++) out[start + b] = toCash(drawnSalary(pts, b + 1), b);
       return out;
     }
 
@@ -387,6 +382,194 @@
   }
 
   /* ---------------------------------------------------------------------- *
+   * DRAWING AN INCOME
+   *
+   * Eight sliders described a salary curve without ever showing its shape.
+   * This is the shape: years across, salary up, and points you place yourself.
+   * Stored as {t, v} — years since work began, and salary in today's money —
+   * so moving the year work starts carries the whole curve with it.
+   * -------------------------------------------------------------------- */
+
+  var DRAW_YEARS = 40;
+  var DRAW_MAX = 150000;          // top of the axis; typing elsewhere goes higher
+
+  function defaultPoints() {
+    return [{ t: 1, v: 28000 }, { t: 6, v: 36000 }, { t: 11, v: 44000 },
+            { t: 21, v: 54000 }, { t: 31, v: 56000 }];
+  }
+
+  function pointsOf(p) {
+    if (!Array.isArray(p.points) || !p.points.length) {
+      // Carry over a profile saved when this was eight five-year bands.
+      p.points = Array.isArray(p.bands) && p.bands.length
+        ? p.bands.map(function (v, i) { return { t: i * 5 + 1, v: Number(v) || 0 }; })
+        : defaultPoints();
+    }
+    return p.points.slice().sort(function (a, b) { return a.t - b.t; });
+  }
+
+  // Salary in year `t` of the career, straight-line between the points either
+  // side of it, flat beyond the ends.
+  function drawnSalary(pts, t) {
+    if (!pts.length) return 0;
+    if (t <= pts[0].t) return pts[0].v;
+    if (t >= pts[pts.length - 1].t) return pts[pts.length - 1].v;
+    for (var i = 0; i < pts.length - 1; i++) {
+      if (t >= pts[i].t && t <= pts[i + 1].t) {
+        var span = pts[i + 1].t - pts[i].t;
+        if (!span) return pts[i + 1].v;
+        var f = (t - pts[i].t) / span;
+        return pts[i].v + (pts[i + 1].v - pts[i].v) * f;
+      }
+    }
+    return pts[pts.length - 1].v;
+  }
+
+  var DRAW = { W: 300, H: 190, ml: 34, mr: 8, mt: 10, mb: 20 };
+
+  function drawX(t) {
+    return DRAW.ml + ((t - 1) / (DRAW_YEARS - 1)) * (DRAW.W - DRAW.ml - DRAW.mr);
+  }
+  function drawY(v) {
+    return DRAW.mt + (1 - v / DRAW_MAX) * (DRAW.H - DRAW.mt - DRAW.mb);
+  }
+
+  function buildIncomeChart() {
+    var host = $("drawChart");
+    if (!host) return;
+    var p = state.scen[state.active];
+    var pts = pointsOf(p);
+
+    var grid = "", step = 50000;
+    for (var v = 0; v <= DRAW_MAX; v += step) {
+      grid += '<line x1="' + DRAW.ml + '" y1="' + drawY(v).toFixed(1) + '" x2="' + (DRAW.W - DRAW.mr) +
+        '" y2="' + drawY(v).toFixed(1) + '" stroke="var(--line)" stroke-width="1"/>' +
+        '<text x="' + (DRAW.ml - 5) + '" y="' + (drawY(v) + 3.5).toFixed(1) +
+        '" text-anchor="end" font-size="8.5" fill="var(--ink-4)">' + gbpShort(v) + "</text>";
+    }
+    for (var t = 1; t <= DRAW_YEARS; t += 10) {
+      grid += '<text x="' + drawX(t).toFixed(1) + '" y="' + (DRAW.H - 6) +
+        '" text-anchor="middle" font-size="8.5" fill="var(--ink-4)">yr ' + t + "</text>";
+    }
+
+    var line = pts.map(function (q, i) {
+      return (i ? "L" : "M") + drawX(q.t).toFixed(1) + " " + drawY(q.v).toFixed(1);
+    }).join(" ");
+    // Flat runs either side, so the curve reads as what it actually models.
+    var lead = "M" + drawX(1).toFixed(1) + " " + drawY(pts[0].v).toFixed(1) +
+               "L" + drawX(pts[0].t).toFixed(1) + " " + drawY(pts[0].v).toFixed(1);
+    var tail = "M" + drawX(pts[pts.length - 1].t).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1) +
+               "L" + drawX(DRAW_YEARS).toFixed(1) + " " + drawY(pts[pts.length - 1].v).toFixed(1);
+
+    var dots = pts.map(function (q, i) {
+      return '<circle class="dp" data-pt="' + i + '" cx="' + drawX(q.t).toFixed(1) + '" cy="' +
+        drawY(q.v).toFixed(1) + '" r="5" fill="var(--live)" stroke="var(--bg-2)" stroke-width="1.5"/>';
+    }).join("");
+
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + DRAW.W + " " + DRAW.H + '" role="img" ' +
+      'aria-label="Salary by year of career. Click to add a point, drag to move, double-click to remove.">' +
+      '<rect class="dp-bg" x="' + DRAW.ml + '" y="' + DRAW.mt + '" width="' + (DRAW.W - DRAW.ml - DRAW.mr) +
+        '" height="' + (DRAW.H - DRAW.mt - DRAW.mb) + '" fill="transparent"/>' +
+      grid +
+      '<path d="' + lead + '" fill="none" stroke="var(--live)" stroke-width="1.5" stroke-dasharray="3 3" opacity=".6"/>' +
+      '<path d="' + line + '" fill="none" stroke="var(--live)" stroke-width="2"/>' +
+      '<path d="' + tail + '" fill="none" stroke="var(--live)" stroke-width="1.5" stroke-dasharray="3 3" opacity=".6"/>' +
+      dots + "</svg>";
+
+    $("drawNote").innerHTML = pts.length +
+      (pts.length === 1 ? " point" : " points") +
+      " \u2014 click to add one, drag to move it, click it twice to take it away.";
+  }
+
+  // Where a pointer is, in career-year and salary.
+  function drawAt(ev, svg) {
+    var rect = svg.getBoundingClientRect();
+    var sx = (ev.clientX - rect.left) / rect.width * DRAW.W;
+    var sy = (ev.clientY - rect.top) / rect.height * DRAW.H;
+    var t = Math.round(1 + (sx - DRAW.ml) / (DRAW.W - DRAW.ml - DRAW.mr) * (DRAW_YEARS - 1));
+    var v = (1 - (sy - DRAW.mt) / (DRAW.H - DRAW.mt - DRAW.mb)) * DRAW_MAX;
+    return { t: clamp(t, 1, DRAW_YEARS), v: Math.max(0, Math.round(v / 500) * 500) };
+  }
+
+  var dpDrag = null, dpLast = null;
+
+  function wireIncomeChart() {
+    var host = $("drawChart");
+    if (!host) return;
+
+    // Points are held by reference, never by index: the list re-sorts the
+    // moment a dragged point passes another, and an index taken before that
+    // then names somebody else's point.
+    host.addEventListener("pointerdown", function (ev) {
+      var svg = host.querySelector("svg");
+      if (!svg) return;
+      var p = state.scen[state.active];
+      var pts = pointsOf(p);
+      var dot = ev.target.closest(".dp");
+
+      if (dot) {
+        var pt = pts[Number(dot.dataset.pt)];
+        var now = Date.now();
+        if (dpLast && dpLast.pt === pt && now - dpLast.at < 400 && pts.length > 1) {
+          p.points = pts.filter(function (q) { return q !== pt; });
+          dpLast = null;
+          dpDrag = null;
+          buildIncomeChart();
+          run();
+          ev.preventDefault();
+          return;
+        }
+        dpLast = { pt: pt, at: now };
+        dpDrag = { pt: pt };
+      } else if (ev.target.closest(".dp-bg")) {
+        var at = drawAt(ev, svg);
+        var here = pts.filter(function (q) { return q.t === at.t; })[0];
+        if (here) { here.v = at.v; dpDrag = { pt: here }; }
+        else {
+          var added = { t: at.t, v: at.v };
+          pts.push(added);
+          dpDrag = { pt: added };
+        }
+        p.points = pts;
+        buildIncomeChart();
+        run();
+      }
+      if (dpDrag) { ev.preventDefault(); host.setPointerCapture(ev.pointerId); }
+    });
+
+    host.addEventListener("pointermove", function (ev) {
+      if (!dpDrag || !dpDrag.pt) return;
+      var live = host.querySelector("svg");     // always the current one
+      if (!live) return;
+      var p = state.scen[state.active];
+      var pts = pointsOf(p);
+      var q = dpDrag.pt;
+      var at = drawAt(ev, live);
+      // Two points cannot share a year; the drag simply stops at the neighbour.
+      if (!pts.some(function (o) { return o !== q && o.t === at.t; })) q.t = at.t;
+      q.v = at.v;
+      p.points = pts;
+      buildIncomeChart();
+      run();
+    });
+
+    var stop = function (ev) {
+      if (!dpDrag) return;
+      dpDrag = null;
+      try { host.releasePointerCapture(ev.pointerId); } catch (e) { /* gone already */ }
+    };
+    host.addEventListener("pointerup", stop);
+    host.addEventListener("pointercancel", stop);
+
+    $("drawReset").addEventListener("click", function () {
+      state.scen[state.active].points = defaultPoints();
+      buildIncomeChart();
+      run();
+    });
+  }
+
+  /* ---------------------------------------------------------------------- *
    * SCENARIOS
    *
    * Up to three runs on the chart at once, plus the life where you never
@@ -412,7 +595,7 @@
       career: i === 0 ? "grad" : null,
       startSalary: 30000,
       growth: 4,
-      bands: [28000, 36000, 44000, 50000, 54000, 56000, 56000, 56000],
+      points: null,                    // drawn on demand; see defaultPoints()
       manual: {},
       manualYears: 12,
       breaks: [],
@@ -430,7 +613,7 @@
     $("plan").value = s.plan;
     $("overpay").value = s.overpay;
     selectMode(s.mode);
-    buildBandRows();
+    buildIncomeChart();
     buildBreakRows();
     buildSalaryTable();
     syncSliders();
@@ -478,22 +661,6 @@
     });
   }
 
-  // Five-year bands: "what will I be on in my first five years, my second…"
-  function buildBandRows() {
-    var host = $("bandRows");
-    if (!host) return;
-    var p = state.scen[state.active];
-    host.innerHTML = p.bands.map(function (v, i) {
-      var from = i * BAND_YEARS + 1, to = from + BAND_YEARS - 1;
-      return '<div class="band">' +
-        '<label for="band' + i + '">Years ' + from + "\u2013" + to + "</label>" +
-        '<span class="ctl__val"><i>\u00a3</i><input type="number" id="band' + i + '" data-band="' + i +
-          '" min="0" max="500000" step="500" value="' + Math.round(v) + '" /></span>' +
-        '<input type="range" tabindex="-1" aria-hidden="true" min="0" max="' + BAND_MAX +
-          '" step="1000" value="' + Math.min(BAND_MAX, Math.round(v)) + '" data-bandrange="' + i + '" />' +
-        "</div>";
-    }).join("");
-  }
 
   function syncSliders() {
     var boxes = document.querySelectorAll("input[data-slider]");
@@ -626,7 +793,10 @@
   function scenarioName(s) {
     if (!s.career && s.mode === "career") return "";      // not chosen yet
     if (s.mode === "growth") return gbpShort(s.startSalary) + " +" + s.growth + "%";
-    if (s.mode === "bands") return gbpShort(s.bands[0]) + " \u2192 " + gbpShort(s.bands[s.bands.length - 1]);
+    if (s.mode === "bands") {
+      var dp = pointsOf(s);
+      return gbpShort(dp[0].v) + " \u2192 " + gbpShort(dp[dp.length - 1].v);
+    }
     if (s.mode === "manual") return "typed by year";
     var c = CAREERS.filter(function (x) { return x.id === s.career; })[0];
     return c ? c.label : "Career";
@@ -2151,7 +2321,7 @@
     document.querySelectorAll("[data-mode]").forEach(function (t) {
       t.addEventListener("click", function () {
         selectMode(t.dataset.mode);
-        buildBandRows();
+        buildIncomeChart();
         buildSalaryTable();
         fitSliders();
         run();
@@ -2188,23 +2358,6 @@
           if (t.dataset.end === "from" && p.breaks[bi].to < bv) p.breaks[bi].to = bv;
           if (t.dataset.end === "to" && bv < p.breaks[bi].from) p.breaks[bi].from = bv;
         }
-        run();
-        return;
-      }
-      if (t.dataset && t.dataset.band != null) {
-        var bv = parseFloat(t.value);
-        p.bands[Number(t.dataset.band)] = isFinite(bv) ? Math.max(0, bv) : 0;
-        var mate = document.querySelector('[data-bandrange="' + t.dataset.band + '"]');
-        if (mate) mate.value = clamp(p.bands[Number(t.dataset.band)],
-                                     Number(mate.min), Number(mate.max));
-        run();
-        return;
-      }
-      if (t.dataset && t.dataset.bandrange != null) {
-        var rv = parseFloat(t.value);
-        p.bands[Number(t.dataset.bandrange)] = rv;
-        var box = $("band" + t.dataset.bandrange);
-        if (box) box.value = Math.round(rv);
         run();
         return;
       }
@@ -2374,6 +2527,7 @@
     if (!state.pgTouched) $("pgStartYear").value = timeline().ugEnds;
     syncSliders();
     wire();
+    wireIncomeChart();
     run();
   }
 
