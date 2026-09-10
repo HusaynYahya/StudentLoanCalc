@@ -377,7 +377,7 @@ select:hover { border-color: var(--ink-4); }
 
 .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table.log, table.rules { width: 100%; border-collapse: collapse; font-size: .795rem; }
-table.log { min-width: 780px; }
+table.log { min-width: 860px; }
 table.rules { min-width: 620px; }
 table.log th, table.rules th {
   text-align: left; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
@@ -391,7 +391,7 @@ th.n, td.n { text-align: right; font-family: var(--num); font-variant-numeric: t
 .log tbody tr.year { cursor: pointer; }
 .log tbody tr.year:hover, .log tbody tr.year.is-open { background: var(--bg-4); }
 .log tbody tr.study td { color: var(--ink-4); }
-.log tbody tr.year.is-warn td:nth-child(7) { color: var(--warn); }
+.log tbody tr.year.is-warn td:nth-child(8) { color: var(--warn); }
 .log .yr { white-space: nowrap; font-family: var(--num); }
 .log .yr::before { content: "\25B8"; display: inline-block; width: 1em; color: var(--ink-4); }
 .log tr.is-open .yr::before { content: "\25BE"; }

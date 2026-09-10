@@ -1255,7 +1255,8 @@
         '<td class="yr">' + y.label + "</td>" +
         '<td class="n">' + ageAt(y.taxYear) + "</td>" +
         '<td class="n">' + (y.phase === "studying" ? "studying" : gbp(y.salary)) + "</td>" +
-        '<td class="n">' + (y.phase === "studying" ? "—" : gbp(y.monthlyRepayment)) + "</td>" +
+        '<td class="n">' + (y.threshold ? gbp(y.threshold) : "\u2014") + "</td>" +
+        '<td class="n">' + (y.phase === "studying" ? "\u2014" : gbp(y.monthlyRepayment)) + "</td>" +
         '<td class="n">' + (due > 0 ? gbp(due) : "—") + "</td>" +
         '<td class="n">' + rateCell(y) + "</td>" +
         '<td class="n">' + gbp(y.interest) + "</td>" +
@@ -1266,7 +1267,7 @@
     });
 
     var r = sim.combined;
-    rows += '<tr class="final"><td>Total</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td>' +
+    rows += '<tr class="final"><td>Total</td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td>' +
       '<td class="n">' + gbp(r.totalRepaid) + '</td><td class="n">' + gbp(r.totalInterest) + '</td>' +
       '<td class="n">—</td><td class="n">' +
       (r.everRepaidInFull ? "£0" : gbp(r.writtenOff) + " written off") + "</td></tr>";
@@ -1298,7 +1299,7 @@
         '<td class="n">' + gbp(m.interest) + "</td>" +
         '<td class="n">' + gbp(m.balance) + "</td></tr>";
     }
-    return '<tr class="months"><td colspan="9"><table class="month-table">' +
+    return '<tr class="months"><td colspan="10"><table class="month-table">' +
       "<thead><tr><th>Month</th><th class=\"n\">Borrowed</th><th class=\"n\">Gross pay</th>" +
       "<th class=\"n\">Deducted</th><th class=\"n\">Rate</th><th class=\"n\">Interest</th><th class=\"n\">Balance</th></tr></thead>" +
       "<tbody>" + cells + "</tbody></table></td></tr>";

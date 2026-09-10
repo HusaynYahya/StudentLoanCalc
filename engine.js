@@ -78,7 +78,10 @@
       blurb: "Master's or doctoral loan. Repaid alongside an undergraduate plan, not instead of it.",
       rate: 0.06,
       threshold: 21000,
-      thresholdFrozenUntil: null,
+      // Frozen since postgraduate loans began in 2016 and never once uprated,
+      // with no end date announced — so it is modelled as staying put, unlike
+      // the Plan 2 and Plan 5 freezes which have dates attached.
+      thresholdFrozenUntil: Infinity,
       writeOffYears: 30,
       writeOffNote: "30 years after the April you were first due to repay.",
       interest: "rpiPlus3",
@@ -91,7 +94,7 @@
     bankBase: 0.0375,         // Bank of England base rate
     interestCap: 0.06,        // "prevailing market rate" cap, in force to Aug 2027
     interestCapUntil: 2027,   // the last tax year that cap has been announced for
-    thresholdGrowth: 0.03,    // how fast thresholds rise once unfrozen
+    thresholdGrowth: 0.036,   // how fast thresholds rise once unfrozen
     salaryGrowth: 0.03,       // used only to extend a salary line past its last entry
     inflation: 0.041,         // used to restate the ledger in today's money
     savings: 0.045            // what the money would earn if you kept it instead

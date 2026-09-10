@@ -39,20 +39,35 @@ test("2026/27 thresholds match the published figures", function () {
 
 test("Plan 5 is frozen until April 2027, then uprated", function () {
   eq(E.thresholdFor("plan5", 2026, A), 25000, "2026/27");
-  near(E.thresholdFor("plan5", 2027, A), 25000 * 1.03, 0.01, "2027/28");
-  near(E.thresholdFor("plan5", 2028, A), 25000 * 1.03 * 1.03, 0.01, "2028/29");
+  var g = 1 + A.thresholdGrowth;
+  near(E.thresholdFor("plan5", 2027, A), 25000 * g, 0.01, "2027/28");
+  near(E.thresholdFor("plan5", 2028, A), 25000 * g * g, 0.01, "2028/29");
 });
 
 test("Plan 2 stays frozen from April 2027 through April 2029", function () {
   eq(E.thresholdFor("plan2", 2027, A), 29385, "2027/28");
   eq(E.thresholdFor("plan2", 2028, A), 29385, "2028/29");
   eq(E.thresholdFor("plan2", 2029, A), 29385, "2029/30");
-  near(E.thresholdFor("plan2", 2030, A), 29385 * 1.03, 0.01, "2030/31 — the freeze lifts");
+  near(E.thresholdFor("plan2", 2030, A), 29385 * (1 + A.thresholdGrowth), 0.01, "2030/31 — the freeze lifts");
+});
+
+test("the postgraduate threshold is frozen indefinitely, not uprated", function () {
+  // £21,000 since 2016, never once raised, with no end date announced.
+  eq(E.thresholdFor("pgl", 2026, A), 21000, "2026/27");
+  eq(E.thresholdFor("pgl", 2030, A), 21000, "2030/31");
+  eq(E.thresholdFor("pgl", 2050, A), 21000, "2050/51");
+});
+
+test("a frozen threshold bites harder every year as pay rises", function () {
+  var early = E.monthlyDeduction(30000, E.thresholdFor("pgl", 2026, A), 0.06);
+  var later = E.monthlyDeduction(30000 * Math.pow(1.04, 15), E.thresholdFor("pgl", 2041, A), 0.06);
+  ok(later > early * 2, "the same real salary is charged far more: " + early + " then " + later);
 });
 
 test("Plan 1, with no freeze, rises every April", function () {
-  near(E.thresholdFor("plan1", 2027, A), 26900 * 1.03, 0.01, "2027/28");
-  near(E.thresholdFor("plan1", 2031, A), 26900 * Math.pow(1.03, 5), 0.01, "2031/32");
+  var g = 1 + A.thresholdGrowth;
+  near(E.thresholdFor("plan1", 2027, A), 26900 * g, 0.01, "2027/28");
+  near(E.thresholdFor("plan1", 2031, A), 26900 * Math.pow(g, 5), 0.01, "2031/32");
 });
 
 /* -- Deductions ---------------------------------------------------------- */
