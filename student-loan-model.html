@@ -1274,8 +1274,9 @@ body.xp-open { overflow: hidden; }
           <div class="ctl">
             <div class="ctl__top">
               <label for="inflation">Inflation</label>
-              <span class="ctl__val"><input type="number" id="inflation" min="0" max="20" step="0.1" value="4.1" data-slider="0,10,0.1" /><i>%</i></span>
+              <span class="ctl__val"><input type="number" id="inflation" min="0" max="20" step="0.1" value="3.2" data-slider="0,10,0.1" /><i>%</i></span>
             </div>
+            <p class="note">Prices, not RPI. RPI overstates inflation, which is why it is being retired — so the loan charges above inflation until 2030 and level with it after.</p>
           </div>
           <div class="ctl">
             <div class="ctl__top">
@@ -1582,7 +1583,14 @@ body.xp-open { overflow: hidden; }
     interestCapUntil: 2027,   // the last tax year it has been announced for
     thresholdGrowth: 0.036,   // how fast thresholds rise once unfrozen
     salaryGrowth: 0.03,       // used only to extend a salary line past its last entry
-    inflation: 0.041,         // used to restate the ledger in today's money
+    /* Prices, for restating the ledger in real terms. CPIH-like, not RPI:
+       RPI overstates inflation, which is the whole reason it is being
+       retired. Using 4.1% here — an RPI figure — while the loan moves to
+       CPIH in 2030 handed every borrower a 0.9% negative real interest rate
+       by default, and that assumption was doing the arguing. At 3.2% the
+       loan charges above inflation until 2030 and level with it after,
+       which is what the reform actually does. */
+    inflation: 0.032,
     savings: 0.045            // what the money would earn if you kept it instead
   };
 
@@ -2585,12 +2593,12 @@ body.xp-open { overflow: hidden; }
       rpiReformDrop: num("rpiReformDrop", 0.9) / 100,
       bankBase: num("bankBase", 3.75) / 100,
       thresholdGrowth: num("thresholdGrowth", 3) / 100,
-      inflation: num("inflation", 4.1) / 100,
+      inflation: num("inflation", 3.2) / 100,
       savings: num("savings", 4.5) / 100,
       // How a salary line is carried on past its last stated year.
       salaryGrowth: (function () {
         var p = profile();
-        var infl = num("inflation", 4.1) / 100;
+        var infl = num("inflation", 3.2) / 100;
         if (p.mode === "growth") return p.growth / 100;     // the rate you typed
         if (p.mode === "manual" || p.mode === "bands") return infl;  // holds its real value
         return infl + 0.005;                                // a career curve, flattening out

@@ -123,12 +123,12 @@
       rpiReformDrop: num("rpiReformDrop", 0.9) / 100,
       bankBase: num("bankBase", 3.75) / 100,
       thresholdGrowth: num("thresholdGrowth", 3) / 100,
-      inflation: num("inflation", 4.1) / 100,
+      inflation: num("inflation", 3.2) / 100,
       savings: num("savings", 4.5) / 100,
       // How a salary line is carried on past its last stated year.
       salaryGrowth: (function () {
         var p = profile();
-        var infl = num("inflation", 4.1) / 100;
+        var infl = num("inflation", 3.2) / 100;
         if (p.mode === "growth") return p.growth / 100;     // the rate you typed
         if (p.mode === "manual" || p.mode === "bands") return infl;  // holds its real value
         return infl + 0.005;                                // a career curve, flattening out

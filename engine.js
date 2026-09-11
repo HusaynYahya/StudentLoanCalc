@@ -111,7 +111,14 @@
     interestCapUntil: 2027,   // the last tax year it has been announced for
     thresholdGrowth: 0.036,   // how fast thresholds rise once unfrozen
     salaryGrowth: 0.03,       // used only to extend a salary line past its last entry
-    inflation: 0.041,         // used to restate the ledger in today's money
+    /* Prices, for restating the ledger in real terms. CPIH-like, not RPI:
+       RPI overstates inflation, which is the whole reason it is being
+       retired. Using 4.1% here — an RPI figure — while the loan moves to
+       CPIH in 2030 handed every borrower a 0.9% negative real interest rate
+       by default, and that assumption was doing the arguing. At 3.2% the
+       loan charges above inflation until 2030 and level with it after,
+       which is what the reform actually does. */
+    inflation: 0.032,
     savings: 0.045            // what the money would earn if you kept it instead
   };
 
