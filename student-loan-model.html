@@ -1356,7 +1356,7 @@ body.xp-open { overflow: hidden; }
         <div id="barsChart" class="viz"></div>
         <p class="key" id="barsKey"></p>
 
-        <h4 class="sub">What the repayments would have grown to</h4>
+        <h4 class="sub">What the fees would have grown to</h4>
         <p class="sub__note" id="saveNote"></p>
         <div id="saveChart" class="viz"></div>
         <p class="key" id="saveKey"></p>
@@ -4040,7 +4040,7 @@ body.xp-open { overflow: hidden; }
       '<i style="color:var(--ink-4)">money spent sooner costs more than the same sum spent later — see the profile panel</i>';
   }
 
-  /* ---- what the repayments would have grown to, at any rate ---------------
+  /* ---- what the fees would have grown to, at any rate ---------------------
    * The pot is a function of one number nobody knows: the return. So rather
    * than assert one, the whole curve is drawn and the rate you have set is
    * marked on it. At 0% the pot is exactly what you handed over, which is why
@@ -4057,18 +4057,18 @@ body.xp-open { overflow: hidden; }
     var r = sim.combined;
     var at = function (s) { return E.fvAt(r, s); };
     var base = at(0);
-    if (!base || !(base.paidOut > 0)) {
+    if (!base || !(base.upfrontPaid > 0)) {
       host.innerHTML = "";
       $("saveKey").innerHTML = "";
-      $("saveNote").textContent = "Nothing is ever deducted on this profile, so there is nothing to have saved instead.";
+      $("saveNote").textContent = "Nothing is borrowed on this profile, so there is no up-front cost to have saved instead.";
       return;
     }
 
-    var paidIn = base.paidOut;
+    var paidIn = base.upfrontPaid;
     var pts = [];
     for (var i = 0; i <= 50; i++) {
       var s = (SAVE_MAX * i) / 50;
-      pts.push({ s: s, v: at(s).fvRepayments });
+      pts.push({ s: s, v: at(s).fvUpfront });
     }
 
     var H = 220, W = vizW("saveChart", H, 760, H);
@@ -4111,13 +4111,13 @@ body.xp-open { overflow: hidden; }
                " L" + x(0).toFixed(1) + " " + y(paidIn).toFixed(1) + " Z";
 
     var here = clamp(saveHover != null ? saveHover : sim.assumptions.savings, 0, SAVE_MAX);
-    var hereV = at(here).fvRepayments;
+    var hereV = at(here).fvUpfront;
     var gain = hereV - paidIn;
     var live = saveHover != null;
 
     host.innerHTML =
       '<svg viewBox="0 0 ' + W + " " + H + '" role="img" ' +
-      'aria-label="What the repayments would have grown to, by savings rate">' + grid +
+      'aria-label="What the fees would have grown to, by savings rate">' + grid +
       '<path d="' + band + '" fill="var(--warn)" opacity=".10"/>' +
       '<line x1="' + x(0) + '" y1="' + y(paidIn).toFixed(1) + '" x2="' + (W - mr) +
         '" y2="' + y(paidIn).toFixed(1) +
@@ -4133,13 +4133,14 @@ body.xp-open { overflow: hidden; }
       "</svg>";
 
     $("saveNote").innerHTML =
-      "Every pound deducted, put in a savings account instead and left there. " +
-      "The flat line is the <b>" + gbp(paidIn) + "</b> you hand over; everything above it is growth.";
+      "The <b>" + gbp(paidIn) + "</b> of fees and living costs you would have to find in cash if you " +
+      "did not borrow \u2014 paid into a savings account instead, as each instalment falls due, and left " +
+      "until " + E.taxYearLabel(base.endYear - 1) + ". The flat line is the cash itself; everything above it is growth.";
 
     $("saveKey").innerHTML =
       '<i style="color:var(--good)">The pot, at ' + pct(here) + (live ? " (hovering)" : " as set") +
         " \u2014 " + gbp(hereV) + "</i>" +
-      '<i style="color:var(--ink-3)">What you hand over \u2014 ' + gbp(paidIn) + "</i>" +
+      '<i style="color:var(--ink-3)">The cash you would hand over \u2014 ' + gbp(paidIn) + "</i>" +
       '<i style="color:var(--ink-4)">the gap is ' + gbp(Math.max(0, gain)) + " of growth</i>";
 
     host.__geom = { ml: ml, iw: iw, W: W };
