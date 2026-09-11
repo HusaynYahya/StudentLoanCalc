@@ -5015,7 +5015,11 @@ body.xp-open { overflow: hidden; }
       rows += '<tr class="' + cls + '" data-year="' + y.taxYear + '" tabindex="0" role="button" aria-expanded="' + isOpen + '">' +
         '<td class="yr">' + y.label + "</td>" +
         '<td class="n">' + ageAt(y.taxYear) + "</td>" +
-        '<td class="n">' + (y.phase === "studying" ? "studying" : gbp(y.salary)) + "</td>" +
+        // "studying" is the ledger's word for every year before repayments
+        // fall due, which includes the year you graduate and start earning.
+        // Where there is a salary, show it: the deduction column already
+        // says nothing is being taken.
+        '<td class="n">' + (y.phase === "studying" && !(y.salary > 0) ? "studying" : gbp(y.salary)) + "</td>" +
         '<td class="n">' + (y.threshold ? gbp(y.threshold) : "\u2014") + "</td>" +
         '<td class="n">' + (y.phase === "studying" ? "\u2014" : gbp(y.monthlyPaid != null ? y.monthlyPaid : y.monthlyRepayment)) + "</td>" +
         '<td class="n">' + (due > 0 ? gbp(due) : "—") + "</td>" +
@@ -5094,9 +5098,25 @@ body.xp-open { overflow: hidden; }
           : "Straight after the course. Repayments fall due from April " + start + ".");
     }
 
+    // The sentence is about the income, so it starts the year the income
+    // does — not the April repayments fall due, which can be years earlier
+    // if there is a gap after the course, and had the sentence opening on a
+    // salary of £0. And ten years after a year is that year plus ten: it
+    // was reading nine years on and calling it ten.
+    // Read off the ledger, so the sentence and the log cannot disagree about
+    // when the income starts. Reading the salary map instead named the year
+    // work nominally begins, which the ledger may still be calling studying;
+    // reading the April repayments fall due named a year that can be several
+    // later, or earlier with a salary of nothing in it.
     var sal = salaries(a);
-    var firstSal = sal[start] || 0;
-    var tenth = sal[start + 9] || 0;
+    var earning = lastSim
+      ? lastSim.combined.years.filter(function (y) { return y.salary > 0; })
+      : [];
+    var from = earning.length ? earning[0].taxYear : null;
+    var firstSal = earning.length ? earning[0].salary : 0;
+    // Ten years on may be past the end of the ledger, so the income model
+    // answers for that one.
+    var tenth = from != null ? (sal[from + 10] || 0) : 0;
     var career = CAREERS.filter(function (c) { return c.id === $("career").value; })[0];
     $("careerNote").textContent = career ? career.note : "";
     markCareer();
@@ -5110,10 +5130,11 @@ body.xp-open { overflow: hidden; }
         : "Nothing is deducted on this profile, so there is nothing to have saved instead.";
     }
 
-    $("predictSummary").innerHTML =
-      "Starting on <b>" + gbp(firstSal) + "</b> in " + E.taxYearLabel(start) +
-      " and reaching <b>" + gbp(tenth) + "</b> ten years later" +
-      (profile().mode === "growth" ? "." : ", with inflation of " + pct(a.inflation) + " added on top.");
+    $("predictSummary").innerHTML = from == null
+      ? "No income on this profile, so nothing is ever deducted."
+      : "Starting on <b>" + gbp(firstSal) + "</b> in " + E.taxYearLabel(from) +
+        " and reaching <b>" + gbp(tenth) + "</b> by " + E.taxYearLabel(from + 10) +
+        (profile().mode === "growth" ? "." : ", with inflation of " + pct(a.inflation) + " added on top.");
   }
 
   /* ---------------------------------------------------------------------- *
