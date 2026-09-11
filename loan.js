@@ -122,7 +122,7 @@
       rpiReformYear: E.DEFAULT_ASSUMPTIONS.rpiReformYear,
       rpiReformDrop: num("rpiReformDrop", 0.9) / 100,
       bankBase: num("bankBase", 3.75) / 100,
-      thresholdGrowth: num("thresholdGrowth", 3) / 100,
+      thresholdGrowth: num("thresholdGrowth", 3.2) / 100,
       inflation: num("inflation", 3.2) / 100,
       savings: num("savings", 4.5) / 100,
       // How a salary line is carried on past its last stated year.

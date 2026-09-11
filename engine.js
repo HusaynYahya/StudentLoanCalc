@@ -109,8 +109,19 @@
     interestCap: 0.06,        // "prevailing market rate" cap, in force to Aug 2027
     interestCapFrom: 2026,    // the first tax year it was announced for
     interestCapUntil: 2027,   // the last tax year it has been announced for
-    thresholdGrowth: 0.036,   // how fast thresholds rise once unfrozen
-    salaryGrowth: 0.03,       // used only to extend a salary line past its last entry
+    /* Plan 5's threshold is uprated by RPI once the freeze lifts in April
+       2027, so it rises with the same index the loan charges — which after
+       the 2030 reform is 3.2%. 3.6% was a guess at governments uprating
+       below the statutory rate, but the freezes that actually do that are
+       modelled by name, and counting them twice made thresholds rise faster
+       than the law says while inflation was assumed faster still. */
+    thresholdGrowth: 0.032,
+    /* Only used to carry a salary line past its last stated year. Regular
+       pay has been growing about half a point above prices (ONS, Apr–Jun
+       2026: 3.5% nominal, +0.5% real on CPIH), which is what the page passes
+       for a career curve; this is the same figure for anyone calling the
+       engine without one. */
+    salaryGrowth: 0.037,
     /* Prices, for restating the ledger in real terms. CPIH-like, not RPI:
        RPI overstates inflation, which is the whole reason it is being
        retired. Using 4.1% here — an RPI figure — while the loan moves to
@@ -119,7 +130,12 @@
        loan charges above inflation until 2030 and level with it after,
        which is what the reform actually does. */
     inflation: 0.032,
-    savings: 0.045            // what the money would earn if you kept it instead
+    /* What the money would earn if you kept it instead. Today's best easy
+       access, near enough (4.5–5.0% in September 2026) — a rate you can go
+       and get, not a forty-year forecast. It is the single number the
+       borrow-or-pay answer turns on, which is why the crossover is stated
+       rather than left to this. */
+    savings: 0.045
   };
 
   /* ---------------------------------------------------------------------- *
