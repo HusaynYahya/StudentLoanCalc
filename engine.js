@@ -972,6 +972,7 @@
     breakEvenSavings: breakEvenSavings,
     thresholdFor: thresholdFor,
     balanceOn: balanceOn,
+    fvAt: fvAt,
     rpiFor: rpiFor,
     upperThresholdFor: upperThresholdFor,
     interestRate: interestRate,

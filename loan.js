@@ -1554,6 +1554,131 @@
       '<i style="color:var(--ink-4)">money spent sooner costs more than the same sum spent later — see the profile panel</i>';
   }
 
+  /* ---- what the repayments would have grown to, at any rate ---------------
+   * The pot is a function of one number nobody knows: the return. So rather
+   * than assert one, the whole curve is drawn and the rate you have set is
+   * marked on it. At 0% the pot is exactly what you handed over, which is why
+   * the flat line and the curve meet at the left edge — everything above it
+   * is growth you did not get.
+   * ---------------------------------------------------------------------- */
+
+  var SAVE_MAX = 0.10;            // the rate axis runs to here
+  var saveHover = null;           // the rate under the pointer, while there is one
+
+  function renderSavingsCurve(sim) {
+    var host = $("saveChart");
+    if (!host) return;
+    var r = sim.combined;
+    var at = function (s) { return E.fvAt(r, s); };
+    var base = at(0);
+    if (!base || !(base.paidOut > 0)) {
+      host.innerHTML = "";
+      $("saveKey").innerHTML = "";
+      $("saveNote").textContent = "Nothing is ever deducted on this profile, so there is nothing to have saved instead.";
+      return;
+    }
+
+    var paidIn = base.paidOut;
+    var pts = [];
+    for (var i = 0; i <= 50; i++) {
+      var s = (SAVE_MAX * i) / 50;
+      pts.push({ s: s, v: at(s).fvRepayments });
+    }
+
+    var H = 220, W = vizW("saveChart", H, 760, H);
+    var ml = 54, mr = 16, mt = 16, mb = 30;
+    var iw = W - ml - mr, ih = H - mt - mb;
+    var top = niceScale(pts[pts.length - 1].v).top;
+    var x = function (s) { return ml + (s / SAVE_MAX) * iw; };
+    var y = function (v) { return mt + ih - (v / top) * ih; };
+
+    // Recessive grid, in the two weights the drawn curve uses.
+    var grid = "";
+    for (var g = 0; g <= top + 1; g += top / 8) {
+      var major = Math.abs(g % (top / 4)) < 1;
+      grid += '<line x1="' + ml + '" y1="' + y(g).toFixed(1) + '" x2="' + (W - mr) +
+        '" y2="' + y(g).toFixed(1) + '" stroke="var(' + (major ? "--line-2" : "--line") +
+        ')" stroke-width="' + (major ? 1.25 : 0.75) + '"/>';
+      if (major) {
+        grid += '<text x="' + (ml - 8) + '" y="' + (y(g) + 3.5).toFixed(1) +
+          '" text-anchor="end" font-size="10.5" fill="var(--ink-4)">' + gbpShort(g) + "</text>";
+      }
+    }
+    for (var p = 0; p <= 10; p++) {
+      var gx = x(p / 100);
+      grid += '<line x1="' + gx.toFixed(1) + '" y1="' + mt + '" x2="' + gx.toFixed(1) +
+        '" y2="' + (mt + ih) + '" stroke="var(' + (p % 2 ? "--line" : "--line-2") +
+        ')" stroke-width="' + (p % 2 ? 0.75 : 1.25) + '"/>';
+      if (p % 2 === 0) {
+        grid += '<text x="' + gx.toFixed(1) + '" y="' + (H - 9) +
+          '" text-anchor="' + (p === 10 ? "end" : "middle") +
+          '" font-size="10.5" fill="var(--ink-4)">' + p + "%</text>";
+      }
+    }
+
+    // The growth is the space between what you handed over and what it could
+    // have become — so it is drawn as that space, not as a second line.
+    var curve = pts.map(function (q, i) {
+      return (i ? "L" : "M") + x(q.s).toFixed(1) + " " + y(q.v).toFixed(1);
+    }).join(" ");
+    var band = curve + " L" + x(SAVE_MAX).toFixed(1) + " " + y(paidIn).toFixed(1) +
+               " L" + x(0).toFixed(1) + " " + y(paidIn).toFixed(1) + " Z";
+
+    var here = clamp(saveHover != null ? saveHover : sim.assumptions.savings, 0, SAVE_MAX);
+    var hereV = at(here).fvRepayments;
+    var gain = hereV - paidIn;
+    var live = saveHover != null;
+
+    host.innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" ' +
+      'aria-label="What the repayments would have grown to, by savings rate">' + grid +
+      '<path d="' + band + '" fill="var(--warn)" opacity=".10"/>' +
+      '<line x1="' + x(0) + '" y1="' + y(paidIn).toFixed(1) + '" x2="' + (W - mr) +
+        '" y2="' + y(paidIn).toFixed(1) +
+        '" stroke="var(--ink-3)" stroke-width="2" stroke-dasharray="6 4"/>' +
+      '<path d="' + curve + '" fill="none" stroke="var(--good)" stroke-width="2"/>' +
+      '<line x1="' + x(here).toFixed(1) + '" y1="' + mt + '" x2="' + x(here).toFixed(1) +
+        '" y2="' + (mt + ih) + '" stroke="var(--good)" stroke-width="1" opacity=".45"/>' +
+      '<circle cx="' + x(here).toFixed(1) + '" cy="' + y(hereV).toFixed(1) +
+        '" r="5" fill="var(--good)" stroke="var(--bg-3)" stroke-width="2"/>' +
+      '<text x="' + clamp(x(here), ml + 4, W - mr - 4).toFixed(1) + '" y="' + (mt - 4) +
+        '" text-anchor="' + (here > SAVE_MAX * 0.7 ? "end" : "start") +
+        '" font-size="11" font-weight="600" fill="var(--good)">' + gbp(hereV) + "</text>" +
+      "</svg>";
+
+    $("saveNote").innerHTML =
+      "Every pound deducted, put in a savings account instead and left there. " +
+      "The flat line is the <b>" + gbp(paidIn) + "</b> you hand over; everything above it is growth.";
+
+    $("saveKey").innerHTML =
+      '<i style="color:var(--good)">The pot, at ' + pct(here) + (live ? " (hovering)" : " as set") +
+        " \u2014 " + gbp(hereV) + "</i>" +
+      '<i style="color:var(--ink-3)">What you hand over \u2014 ' + gbp(paidIn) + "</i>" +
+      '<i style="color:var(--ink-4)">the gap is ' + gbp(Math.max(0, gain)) + " of growth</i>";
+
+    host.__geom = { ml: ml, iw: iw, W: W };
+  }
+
+  function wireSavingsCurve() {
+    var host = $("saveChart");
+    if (!host) return;
+    var move = function (ev) {
+      var svg = host.querySelector("svg");
+      if (!svg || !host.__geom || !lastSim) return;
+      var rect = svg.getBoundingClientRect();
+      var g = host.__geom;
+      var sx = ((ev.clientX - rect.left) / rect.width) * g.W;
+      saveHover = clamp(((sx - g.ml) / g.iw) * SAVE_MAX, 0, SAVE_MAX);
+      renderSavingsCurve(lastSim);
+    };
+    host.addEventListener("pointermove", move);
+    host.addEventListener("pointerleave", function () {
+      if (saveHover == null) return;
+      saveHover = null;
+      if (lastSim) renderSavingsCurve(lastSim);
+    });
+  }
+
   /* ---- the alternative: find the money yourself -------------------------- *
    * Not borrowing does not make a degree free. It means paying the fees and
    * living costs in cash, as they fall due, during the course. That — not
@@ -2408,6 +2533,7 @@
     renderCostChart(runs);
     renderBarsChart(runs);
     renderFocus(runs);
+    renderSavingsCurve(runs.filter(function (s) { return s.index === state.active; })[0] || runs[0]);
   }
 
   /* ---- the years, on a line ---------------------------------------------- *
@@ -3168,6 +3294,7 @@
     syncSliders();
     wireIncomeChart();
     wireExplain();
+    wireSavingsCurve();
     wireTimelineTrack();
     renderTimelineTrack();
     applyPanel();
